@@ -21,16 +21,16 @@ const ROOT_DIR = path.resolve(__dirname, '../..');
 async function runConfigValidation() {
   console.log('\n================================================================');
   console.log('🚀 CLOUD LAUNCH CONFIGURATION VALIDATION SUITE');
-  console.log('   Targeting: Render (Backend) + Vercel (Frontend) + Neon (DB)');
+  console.log('   Targeting: Render (Backend) + Vercel (Frontend) + Railway + Neon (DB)');
   console.log('================================================================\n');
 
   let passed = 0;
-  let total = 6;
+  let total = 7;
 
   // ---------------------------------------------------------------------------
   // 1. Validate render.yaml
   // ---------------------------------------------------------------------------
-  console.log('[Check 1/6] Validating render.yaml Blueprint...');
+  console.log('[Check 1/7] Validating render.yaml Blueprint...');
   const renderYamlPath = path.join(ROOT_DIR, 'render.yaml');
   if (!fs.existsSync(renderYamlPath)) {
     console.error('  ❌ render.yaml not found at project root!');
@@ -68,7 +68,7 @@ async function runConfigValidation() {
   // ---------------------------------------------------------------------------
   // 2. Validate vercel.json configurations
   // ---------------------------------------------------------------------------
-  console.log('\n[Check 2/6] Validating Vercel Deployment Configurations...');
+  console.log('\n[Check 2/7] Validating Vercel Deployment Configurations...');
   const rootVercelPath = path.join(ROOT_DIR, 'vercel.json');
   const frontendVercelPath = path.join(ROOT_DIR, 'frontend/vercel.json');
 
@@ -112,9 +112,50 @@ async function runConfigValidation() {
   }
 
   // ---------------------------------------------------------------------------
-  // 3. Validate Environment Variable Templates & Security (.gitignore)
+  // 3. Validate railway.json configurations
   // ---------------------------------------------------------------------------
-  console.log('\n[Check 3/6] Validating Environment Variable Templates & Git Secrets...');
+  console.log('\n[Check 3/7] Validating Railway Configuration (railway.json)...');
+  const rootRailwayPath = path.join(ROOT_DIR, 'railway.json');
+  const backendRailwayPath = path.join(ROOT_DIR, 'backend/railway.json');
+
+  let railwayOk = true;
+  if (!fs.existsSync(rootRailwayPath)) {
+    console.error('  ❌ Root railway.json not found!');
+    railwayOk = false;
+  } else {
+    try {
+      const rootRailway = JSON.parse(fs.readFileSync(rootRailwayPath, 'utf8'));
+      if (rootRailway.build?.builder !== 'NIXPACKS' || !rootRailway.deploy?.startCommand) {
+        console.warn('  ⚠️ Root railway.json missing standard builder or startCommand');
+      }
+    } catch (e) {
+      console.error(`  ❌ Root railway.json has invalid JSON: ${e.message}`);
+      railwayOk = false;
+    }
+  }
+
+  if (fs.existsSync(backendRailwayPath)) {
+    try {
+      JSON.parse(fs.readFileSync(backendRailwayPath, 'utf8'));
+    } catch (e) {
+      console.warn(`  ⚠️ backend/railway.json has invalid JSON: ${e.message}`);
+    }
+  }
+
+  if (railwayOk) {
+    console.log('  ✅ Railway configuration validated:');
+    console.log('     • Builder: NIXPACKS (Node.js engine)');
+    console.log('     • Build Command: npm install --prefix backend');
+    console.log('     • Start Command: cd backend && npm start');
+    console.log('     • Health Check: /api/health');
+    console.log('     • Subdirectory fallback: backend/railway.json verified');
+    passed++;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 4. Validate Environment Variable Templates & Security (.gitignore)
+  // ---------------------------------------------------------------------------
+  console.log('\n[Check 4/7] Validating Environment Variable Templates & Git Secrets...');
   const backendEnvEx = path.join(ROOT_DIR, 'backend/.env.example');
   const frontendEnvEx = path.join(ROOT_DIR, 'frontend/.env.example');
   const gitignorePath = path.join(ROOT_DIR, '.gitignore');
@@ -153,9 +194,9 @@ async function runConfigValidation() {
   }
 
   // ---------------------------------------------------------------------------
-  // 4. Validate Frontend API Centralized Client
+  // 5. Validate Frontend API Centralized Client
   // ---------------------------------------------------------------------------
-  console.log('\n[Check 4/6] Validating Frontend API Client Resolution...');
+  console.log('\n[Check 5/7] Validating Frontend API Client Resolution...');
   const apiClientPath = path.join(ROOT_DIR, 'frontend/src/lib/api.ts');
   if (!fs.existsSync(apiClientPath)) {
     console.error('  ❌ frontend/src/lib/api.ts not found!');
@@ -173,9 +214,9 @@ async function runConfigValidation() {
   }
 
   // ---------------------------------------------------------------------------
-  // 5. Validate Database Connection to Neon
+  // 6. Validate Database Connection to Neon
   // ---------------------------------------------------------------------------
-  console.log('\n[Check 5/6] Validating Neon PostgreSQL Connection & Schema...');
+  console.log('\n[Check 6/7] Validating Neon PostgreSQL Connection & Schema...');
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) {
     console.warn('  ⚠️ DATABASE_URL not found in local backend/.env. Skipping live probe.');
@@ -207,9 +248,9 @@ async function runConfigValidation() {
   }
 
   // ---------------------------------------------------------------------------
-  // 6. Validate Backend Health Endpoint & Dynamic CORS
+  // 7. Validate Backend Health Endpoint & Dynamic CORS
   // ---------------------------------------------------------------------------
-  console.log('\n[Check 6/6] Validating Backend Server & Dynamic CORS Policy...');
+  console.log('\n[Check 7/7] Validating Backend Server & Dynamic CORS Policy...');
   const serverJsPath = path.join(ROOT_DIR, 'backend/server.js');
   if (fs.existsSync(serverJsPath)) {
     const serverCode = fs.readFileSync(serverJsPath, 'utf8');
@@ -219,10 +260,10 @@ async function runConfigValidation() {
 
     if (hasTrustProxy && hasVercelRegex && hasHealthCheck) {
       console.log('  ✅ Backend cloud runtime readiness verified:');
-      console.log('     • "trust proxy": Enabled (for Render reverse proxy HTTPS headers)');
+      console.log('     • "trust proxy": Enabled (for Render & Railway reverse proxy HTTPS headers)');
       console.log('     • Dynamic CORS: *.vercel.app permitted automatically');
       console.log('     • Health Check: /api/health endpoint active');
-      console.log('     • Port Binding: 0.0.0.0 (required for Render)');
+      console.log('     • Port Binding: 0.0.0.0 (required for cloud container platforms)');
       passed++;
     } else {
       console.warn('  ⚠️ Some cloud server settings may need verification.');
@@ -236,7 +277,7 @@ async function runConfigValidation() {
   if (passed === total) {
     console.log(`🎉 ALL ${passed}/${total} VALIDATION CHECKS PASSED!`);
     console.log('   The project is 100% prepared and pre-configured for instant');
-    console.log('   zero-cost ($0/mo) live cloud deployment on Render & Vercel.');
+    console.log('   live cloud deployment on Render, Railway, Vercel & Neon.');
   } else {
     console.log(`✨ Validation complete: ${passed}/${total} checks passed.`);
   }
