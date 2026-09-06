@@ -1,0 +1,35 @@
+# ========================================================
+# Render Blueprint - Welfare Management System Backend
+# ========================================================
+# Docs: https://render.com/docs/blueprint-spec
+
+version: "1"
+
+services:
+  - type: web
+    name: welfare-management-backend
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: CLIENT_URL
+        sync: false
+        # Set this to your frontend URL in the Render dashboard:
+        # e.g., https://your-welfare-app.vercel.app
+      - key: DATABASE_URL
+        sync: false
+        # Set this to your Neon PostgreSQL connection string:
+        # e.g., postgresql://[user]:[password]@[ep-xyz.neon.tech]/[dbname]?sslmode=require
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 24h
