@@ -39,13 +39,32 @@ A complete, production-ready guide to deploying the **Staff Welfare Management S
 
 ---
 
-## 📋 100% Free Tier Service Summary
+## 📋 Cloud Architecture Options
 
-| Component | Cloud Provider | Free Tier Plan Details | Credit Card Required? | Permanent Public URL |
+You can deploy the Staff Welfare Management System using either of two 100% free deployment architectures:
+
+### 🌟 Option A: 1-Click All-in-One Vercel Fullstack (RECOMMENDED)
+Deploy **both** the Next.js frontend and the Express backend as a **single unified project on Vercel**!
+- **Zero Cold Starts**: Serverless functions wake in ~50ms (unlike container spin-down delays).
+- **Zero CORS Issues**: Frontend & Backend share the same domain (`https://[app].vercel.app`).
+- **Zero External Bots**: No keep-alive pingers or background cron jobs required.
+- **Single Setup**: Just connect your repository to Vercel and paste your `DATABASE_URL`.
+
+| Component | Platform | Free Tier | Public Live URL | Setup Time |
 | :--- | :--- | :--- | :--- | :--- |
-| **Frontend** | **Vercel** | Hobby Plan (Unlimited preview deployments, 100GB bandwidth) | ❌ No | `https://[app-name].vercel.app` |
-| **Backend** | **Render** | Free Web Service (512MB RAM, shared CPU, auto TLS) | ❌ No | `https://[service-name].onrender.com` |
-| **Database** | **Neon** | Free Tier (0.5 GB storage, serverless autoscaling, pooled connection) | ❌ No | `ep-[pooler-id].region.neon.tech` |
+| **Frontend + Backend API** | **Vercel** | Hobby (Free) | `https://[app-name].vercel.app` | **~2 Minutes** |
+| **Database** | **Neon** | Serverless Free | `ep-[pooler].neon.tech` | **~1 Minute** |
+
+---
+
+### ⚡ Option B: Decoupled Multi-Service (Vercel + Render / Railway)
+Deploy the Next.js frontend on Vercel and the Express backend in a container on Render or Railway.
+
+| Component | Platform | Free Tier | Public Live URL | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| **Frontend** | **Vercel** | Hobby (Free) | `https://[app].vercel.app` | Global edge CDN |
+| **Backend** | **Render / Railway** | Free Web Service | `https://[api].onrender.com` | Requires keep-alive ping on Render |
+| **Database** | **Neon** | Serverless Free | `ep-[pooler].neon.tech` | AWS US-East-2 co-located |
 
 ---
 

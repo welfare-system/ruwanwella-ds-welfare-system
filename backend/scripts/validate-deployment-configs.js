@@ -21,16 +21,16 @@ const ROOT_DIR = path.resolve(__dirname, '../..');
 async function runConfigValidation() {
   console.log('\n================================================================');
   console.log('🚀 CLOUD LAUNCH CONFIGURATION VALIDATION SUITE');
-  console.log('   Targeting: Render (Backend) + Vercel (Frontend) + Railway + Neon (DB)');
+  console.log('   Targeting: Vercel (Unified Fullstack) + Render + Railway + Neon');
   console.log('================================================================\n');
 
   let passed = 0;
-  let total = 7;
+  let total = 8;
 
   // ---------------------------------------------------------------------------
   // 1. Validate render.yaml
   // ---------------------------------------------------------------------------
-  console.log('[Check 1/7] Validating render.yaml Blueprint...');
+  console.log('[Check 1/8] Validating render.yaml Blueprint...');
   const renderYamlPath = path.join(ROOT_DIR, 'render.yaml');
   if (!fs.existsSync(renderYamlPath)) {
     console.error('  ❌ render.yaml not found at project root!');
@@ -68,7 +68,7 @@ async function runConfigValidation() {
   // ---------------------------------------------------------------------------
   // 2. Validate vercel.json configurations
   // ---------------------------------------------------------------------------
-  console.log('\n[Check 2/7] Validating Vercel Deployment Configurations...');
+  console.log('\n[Check 2/8] Validating Vercel Deployment Configurations...');
   const rootVercelPath = path.join(ROOT_DIR, 'vercel.json');
   const frontendVercelPath = path.join(ROOT_DIR, 'frontend/vercel.json');
 
@@ -114,7 +114,7 @@ async function runConfigValidation() {
   // ---------------------------------------------------------------------------
   // 3. Validate railway.json configurations
   // ---------------------------------------------------------------------------
-  console.log('\n[Check 3/7] Validating Railway Configuration (railway.json)...');
+  console.log('\n[Check 3/8] Validating Railway Configuration (railway.json)...');
   const rootRailwayPath = path.join(ROOT_DIR, 'railway.json');
   const backendRailwayPath = path.join(ROOT_DIR, 'backend/railway.json');
 
@@ -155,7 +155,7 @@ async function runConfigValidation() {
   // ---------------------------------------------------------------------------
   // 4. Validate Environment Variable Templates & Security (.gitignore)
   // ---------------------------------------------------------------------------
-  console.log('\n[Check 4/7] Validating Environment Variable Templates & Git Secrets...');
+  console.log('\n[Check 4/8] Validating Environment Variable Templates & Git Secrets...');
   const backendEnvEx = path.join(ROOT_DIR, 'backend/.env.example');
   const frontendEnvEx = path.join(ROOT_DIR, 'frontend/.env.example');
   const gitignorePath = path.join(ROOT_DIR, '.gitignore');
@@ -196,7 +196,7 @@ async function runConfigValidation() {
   // ---------------------------------------------------------------------------
   // 5. Validate Frontend API Centralized Client
   // ---------------------------------------------------------------------------
-  console.log('\n[Check 5/7] Validating Frontend API Client Resolution...');
+  console.log('\n[Check 5/8] Validating Frontend API Client Resolution...');
   const apiClientPath = path.join(ROOT_DIR, 'frontend/src/lib/api.ts');
   if (!fs.existsSync(apiClientPath)) {
     console.error('  ❌ frontend/src/lib/api.ts not found!');
@@ -216,7 +216,7 @@ async function runConfigValidation() {
   // ---------------------------------------------------------------------------
   // 6. Validate Database Connection to Neon
   // ---------------------------------------------------------------------------
-  console.log('\n[Check 6/7] Validating Neon PostgreSQL Connection & Schema...');
+  console.log('\n[Check 6/8] Validating Neon PostgreSQL Connection & Schema...');
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) {
     console.warn('  ⚠️ DATABASE_URL not found in local backend/.env. Skipping live probe.');
@@ -250,7 +250,7 @@ async function runConfigValidation() {
   // ---------------------------------------------------------------------------
   // 7. Validate Backend Health Endpoint & Dynamic CORS
   // ---------------------------------------------------------------------------
-  console.log('\n[Check 7/7] Validating Backend Server & Dynamic CORS Policy...');
+  console.log('\n[Check 7/8] Validating Backend Server & Dynamic CORS Policy...');
   const serverJsPath = path.join(ROOT_DIR, 'backend/server.js');
   if (fs.existsSync(serverJsPath)) {
     const serverCode = fs.readFileSync(serverJsPath, 'utf8');
@@ -271,13 +271,58 @@ async function runConfigValidation() {
   }
 
   // ---------------------------------------------------------------------------
+  // 8. Validate Next.js Unified API Route Bridge (Vercel Serverless Fullstack)
+  // ---------------------------------------------------------------------------
+  console.log('\n[Check 8/8] Validating Next.js Unified API Routes Bridge (Vercel Fullstack)...');
+  const apiRouteBridgePath = path.join(ROOT_DIR, 'frontend/src/pages/api/[[...all]].js');
+  const expressAppPath = path.join(ROOT_DIR, 'frontend/src/server/expressApp.js');
+  const frontendPkgPath = path.join(ROOT_DIR, 'frontend/package.json');
+
+  let bridgeOk = true;
+  if (!fs.existsSync(apiRouteBridgePath)) {
+    console.error('  ❌ frontend/src/pages/api/[[...all]].js not found!');
+    bridgeOk = false;
+  } else {
+    const bridgeCode = fs.readFileSync(apiRouteBridgePath, 'utf8');
+    if (!bridgeCode.includes('bodyParser: false') || !bridgeCode.includes('externalResolver: true')) {
+      console.warn('  ⚠️ API route bridge missing bodyParser or externalResolver flags');
+      bridgeOk = false;
+    }
+  }
+
+  if (!fs.existsSync(expressAppPath)) {
+    console.error('  ❌ frontend/src/server/expressApp.js not found!');
+    bridgeOk = false;
+  }
+
+  if (fs.existsSync(frontendPkgPath)) {
+    const pkg = JSON.parse(fs.readFileSync(frontendPkgPath, 'utf8'));
+    const requiredPkgs = ['express', 'pg', 'bcryptjs', 'jsonwebtoken'];
+    const missing = requiredPkgs.filter(p => !pkg.dependencies?.[p]);
+    if (missing.length > 0) {
+      console.warn(`  ⚠️ frontend/package.json missing dependencies: ${missing.join(', ')}`);
+      bridgeOk = false;
+    }
+  }
+
+  if (bridgeOk) {
+    console.log('  ✅ Unified Next.js API Routes Bridge verified:');
+    console.log('     • Catch-all Route: src/pages/api/[[...all]].js active');
+    console.log('     • Serverless Flags: bodyParser: false, externalResolver: true');
+    console.log('     • Express App Core: src/server/expressApp.js mounted');
+    console.log('     • Runtime Dependencies: express, pg, bcryptjs, jsonwebtoken bundled');
+    console.log('     • Deployment Mode: 100% Free Unified Single-Deployment on Vercel');
+    passed++;
+  }
+
+  // ---------------------------------------------------------------------------
   // Summary
   // ---------------------------------------------------------------------------
   console.log('\n================================================================');
   if (passed === total) {
     console.log(`🎉 ALL ${passed}/${total} VALIDATION CHECKS PASSED!`);
-    console.log('   The project is 100% prepared and pre-configured for instant');
-    console.log('   live cloud deployment on Render, Railway, Vercel & Neon.');
+    console.log('   The project is 100% prepared for unified 1-click cloud');
+    console.log('   deployment on Vercel, as well as standalone on Render/Railway.');
   } else {
     console.log(`✨ Validation complete: ${passed}/${total} checks passed.`);
   }
