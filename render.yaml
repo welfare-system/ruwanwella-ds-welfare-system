@@ -10,7 +10,7 @@ services:
     name: welfare-management-backend
     runtime: node
     plan: free
-    region: oregon
+    region: ohio # Co-located with Neon US-East-2 for ultra-fast <3ms database queries
     rootDir: backend
     buildCommand: npm install
     startCommand: npm start
@@ -27,8 +27,7 @@ services:
         # e.g., https://your-welfare-app.vercel.app
       - key: DATABASE_URL
         sync: false
-        # Set this to your Neon PostgreSQL connection string:
-        # e.g., postgresql://[user]:[password]@[ep-xyz.neon.tech]/[dbname]?sslmode=require
+        # Pre-configured with your Neon PostgreSQL (US-East-2):
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_EXPIRES_IN
