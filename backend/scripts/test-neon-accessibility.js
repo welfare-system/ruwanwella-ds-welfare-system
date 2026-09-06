@@ -7,6 +7,8 @@
  * Run with: node backend/scripts/test-neon-accessibility.js
  */
 
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 require('dotenv').config();
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
