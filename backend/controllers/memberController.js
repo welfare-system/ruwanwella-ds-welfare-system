@@ -73,27 +73,73 @@ exports.createMember = async (req, res) => {
       });
     }
 
-    const allMembers = await store.getMembers();
-    // Generate next member ID
-    const nextNum = 1001 + allMembers.length;
-    const memberId = `WLF-${nextNum}`;
+    const cleanEmail = email && typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : null;
 
-    const newMember = {
-      id: `mem_${Date.now()}`,
-      memberId,
-      name: name.trim(),
-      email: email && email.trim() ? email.trim().toLowerCase() : null,
-      phone: phone.trim(),
-      department: department ? department.trim() : 'Operations',
-      role: role ? role.trim() : 'Member',
-      status: 'Active',
-      monthlyContribution: Number(monthlyContribution) || 100,
-      totalContributed: 0,
-      joinDate: new Date().toISOString().split('T')[0],
-      notes: notes ? notes.trim() : ''
-    };
+    // Retry loop with sequence check to guarantee zero duplicate key constraint violations
+    let attempts = 0;
+    const maxAttempts = 5;
+    let created = null;
 
-    const created = await store.addMember(newMember);
+    while (attempts < maxAttempts) {
+      attempts++;
+      const memberId = await store.getNextMemberId();
+      const uniqueId = `mem_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
+      const newMember = {
+        id: uniqueId,
+        memberId,
+        name: name.trim(),
+        email: cleanEmail,
+        phone: phone.trim(),
+        department: department ? department.trim() : 'Operations',
+        role: role ? role.trim() : 'Member',
+        status: 'Active',
+        monthlyContribution: Number(monthlyContribution) || 100,
+        totalContributed: 0,
+        joinDate: new Date().toISOString().split('T')[0],
+        notes: notes ? notes.trim() : ''
+      };
+
+      try {
+        created = await store.addMember(newMember);
+        break; // Successfully registered
+      } catch (insertErr) {
+        const isDuplicateMemberId =
+          insertErr.code === '23505' &&
+          (insertErr.constraint === 'members_member_id_key' ||
+           (insertErr.detail && insertErr.detail.includes('member_id')) ||
+           (insertErr.message && insertErr.message.includes('member_id')));
+
+        const isDuplicateEmail =
+          insertErr.code === '23505' &&
+          (insertErr.constraint === 'members_email_key' ||
+           (insertErr.detail && insertErr.detail.includes('email')) ||
+           (insertErr.message && insertErr.message.includes('email')));
+
+        if (isDuplicateEmail) {
+          return res.status(400).json({
+            success: false,
+            error: 'A member with this email address is already registered.'
+          });
+        }
+
+        if (isDuplicateMemberId && attempts < maxAttempts) {
+          // Collision on member_id detected, retry with next sequence ID
+          continue;
+        }
+
+        if (attempts >= maxAttempts) {
+          // Final fallback: generate a timestamp-random unique sequence
+          const fallbackMemberId = `WLF-${Date.now().toString().slice(-6)}${Math.floor(10 + Math.random() * 90)}`;
+          newMember.memberId = fallbackMemberId;
+          newMember.id = `mem_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+          created = await store.addMember(newMember);
+          break;
+        }
+
+        throw insertErr;
+      }
+    }
 
     res.status(201).json({
       success: true,

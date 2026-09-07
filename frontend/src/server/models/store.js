@@ -350,10 +350,70 @@ module.exports = {
     return res.rows.length > 0 ? mapMember(res.rows[0]) : null;
   },
 
-  addMember: async (member) => {
+  getNextMemberId: async () => {
     if (!db.isConfigured()) {
-      memMembers.unshift(member);
-      return member;
+      let maxNum = 1000;
+      const existing = new Set();
+      for (const m of memMembers) {
+        if (!m.memberId) continue;
+        const mid = m.memberId.trim();
+        existing.add(mid.toUpperCase());
+        const match = mid.match(/^WLF-(\d+)$/i);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        }
+      }
+      let candidateNum = maxNum + 1;
+      let candidateId = `WLF-${candidateNum}`;
+      while (existing.has(candidateId.toUpperCase())) {
+        candidateNum++;
+        candidateId = `WLF-${candidateNum}`;
+      }
+      return candidateId;
+    }
+
+    try {
+      const res = await db.query('SELECT member_id FROM members');
+      let maxNum = 1000;
+      const existing = new Set();
+      for (const row of res.rows) {
+        if (!row.member_id) continue;
+        const mid = row.member_id.trim();
+        existing.add(mid.toUpperCase());
+        const match = mid.match(/^WLF-(\d+)$/i);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        }
+      }
+      let candidateNum = maxNum + 1;
+      let candidateId = `WLF-${candidateNum}`;
+      while (existing.has(candidateId.toUpperCase())) {
+        candidateNum++;
+        candidateId = `WLF-${candidateNum}`;
+      }
+      return candidateId;
+    } catch (err) {
+      return `WLF-${Date.now().toString().slice(-6)}`;
+    }
+  },
+
+  addMember: async (member) => {
+    const cleanId = member.id || `mem_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const cleanMemberId = member.memberId || (await module.exports.getNextMemberId());
+    const cleanEmail = member.email && typeof member.email === 'string' && member.email.trim() ? member.email.trim().toLowerCase() : null;
+
+    const toInsert = {
+      ...member,
+      id: cleanId,
+      memberId: cleanMemberId,
+      email: cleanEmail
+    };
+
+    if (!db.isConfigured()) {
+      memMembers.unshift(toInsert);
+      return toInsert;
     }
     await db.query(`
       INSERT INTO members (
@@ -361,20 +421,20 @@ module.exports = {
         monthly_contribution, total_contributed, join_date, notes
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
     `, [
-      member.id,
-      member.memberId,
-      member.name,
-      member.email && member.email.trim ? member.email.trim().toLowerCase() : null,
-      member.phone,
-      member.department,
-      member.role || 'Member',
-      member.status || 'Active',
-      member.monthlyContribution || 100,
-      member.totalContributed || 0,
-      member.joinDate || new Date().toISOString().split('T')[0],
-      member.notes || ''
+      toInsert.id,
+      toInsert.memberId,
+      toInsert.name,
+      toInsert.email,
+      toInsert.phone,
+      toInsert.department || 'Operations',
+      toInsert.role || 'Member',
+      toInsert.status || 'Active',
+      toInsert.monthlyContribution || 100,
+      toInsert.totalContributed || 0,
+      toInsert.joinDate || new Date().toISOString().split('T')[0],
+      toInsert.notes || ''
     ]);
-    return member;
+    return toInsert;
   },
 
   updateMember: async (id, updates) => {
