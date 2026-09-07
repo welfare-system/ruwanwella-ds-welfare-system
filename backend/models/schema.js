@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS members (
   id VARCHAR(64) PRIMARY KEY,
   member_id VARCHAR(32) UNIQUE NOT NULL,
   name VARCHAR(255) NOT NULL,
-  email VARCHAR(255) UNIQUE NOT NULL,
+  email VARCHAR(255) UNIQUE,
   phone VARCHAR(50) NOT NULL,
   department VARCHAR(100) NOT NULL,
   role VARCHAR(50) NOT NULL DEFAULT 'Member',
@@ -122,6 +122,9 @@ async function initDatabase() {
   try {
     console.log('🔄 Checking & initializing Neon PostgreSQL schema...');
     await db.query(CREATE_TABLES_SQL);
+    try {
+      await db.query('ALTER TABLE members ALTER COLUMN email DROP NOT NULL;');
+    } catch (_) {}
     console.log('✅ PostgreSQL tables verified / created.');
 
     // 1. Seed System Settings

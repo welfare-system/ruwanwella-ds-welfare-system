@@ -365,7 +365,7 @@ module.exports = {
       member.id,
       member.memberId,
       member.name,
-      member.email,
+      member.email && member.email.trim ? member.email.trim().toLowerCase() : null,
       member.phone,
       member.department,
       member.role || 'Member',
@@ -390,7 +390,7 @@ module.exports = {
     if (!existing) return null;
 
     const name = updates.name !== undefined ? updates.name : existing.name;
-    const email = updates.email !== undefined ? updates.email : existing.email;
+    const email = updates.email !== undefined ? (updates.email && updates.email.trim ? updates.email.trim().toLowerCase() : null) : existing.email;
     const phone = updates.phone !== undefined ? updates.phone : existing.phone;
     const department = updates.department !== undefined ? updates.department : existing.department;
     const role = updates.role !== undefined ? updates.role : existing.role;

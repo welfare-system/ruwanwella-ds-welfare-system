@@ -66,10 +66,10 @@ exports.createMember = async (req, res) => {
   try {
     const { name, email, phone, department, role, monthlyContribution, notes } = req.body;
 
-    if (!name || !email || !phone) {
+    if (!name || !phone) {
       return res.status(400).json({
         success: false,
-        error: 'Name, email, and phone number are required.'
+        error: 'Name and phone number are required.'
       });
     }
 
@@ -82,7 +82,7 @@ exports.createMember = async (req, res) => {
       id: `mem_${Date.now()}`,
       memberId,
       name: name.trim(),
-      email: email.trim().toLowerCase(),
+      email: email && email.trim() ? email.trim().toLowerCase() : null,
       phone: phone.trim(),
       department: department ? department.trim() : 'Operations',
       role: role ? role.trim() : 'Member',

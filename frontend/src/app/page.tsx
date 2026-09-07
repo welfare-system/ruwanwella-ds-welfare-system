@@ -1870,12 +1870,11 @@ export default function WelfareApp() {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">{language === "si" ? "විද්‍යුත් තැපැල් ලිපිනය *" : "Email Address *"}</label>
+                  <label className="form-label">{language === "si" ? "විද්‍යුත් තැපැල් ලිපිනය (විකල්පයි)" : "Email Address (Optional)"}</label>
                   <input
                     type="email"
                     className="form-input"
                     placeholder="nimal.perera@org.internal"
-                    required
                     value={memberForm.email}
                     onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
                   />
@@ -2884,12 +2883,11 @@ export default function WelfareApp() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">{language === "si" ? "විද්‍යුත් තැපැල් ලිපිනය *" : "Email Address *"}</label>
+                    <label className="form-label">{language === "si" ? "විද්‍යුත් තැපැල් ලිපිනය (විකල්පයි)" : "Email Address (Optional)"}</label>
                     <input
                       type="email"
                       className="form-input"
                       placeholder="nimal.perera@org.internal"
-                      required
                       value={memberForm.email}
                       onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
                     />
@@ -2997,11 +2995,10 @@ export default function WelfareApp() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">{language === "si" ? "විද්‍යුත් තැපැල් ලිපිනය" : "Email"}</label>
+                    <label className="form-label">{language === "si" ? "විද්‍යුත් තැපැල් ලිපිනය (විකල්පයි)" : "Email (Optional)"}</label>
                     <input
                       type="email"
                       className="form-input"
-                      required
                       value={memberForm.email}
                       onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
                     />
