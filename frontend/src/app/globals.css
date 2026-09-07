@@ -98,13 +98,41 @@ html, body {
   filter: blur(90px);
 }
 
-/* Container */
+/* Container - Fluid Full-Width Layout */
 .app-container {
   position: relative;
   z-index: 1;
-  max-width: 1320px;
+  width: 100%;
+  max-width: 100%;
   margin: 0 auto;
-  padding: 24px 20px 80px 20px;
+  padding-top: 24px;
+  padding-bottom: 80px;
+  box-sizing: border-box;
+}
+
+/* Fluid Layout Utilities (Tailwind Equivalent) */
+.w-full {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.px-4 {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+@media (min-width: 640px) {
+  .sm\:px-6 {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .lg\:px-8 {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
 }
 
 /* ── Login / Authentication Screen ───────────────────────────────────────── */

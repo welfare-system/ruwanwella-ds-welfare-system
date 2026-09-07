@@ -1068,7 +1068,7 @@ export default function WelfareApp() {
   const isAdmin = currentUser.role === "admin";
 
   return (
-    <div className="app-container">
+    <div className="app-container w-full px-4 sm:px-6 lg:px-8">
       {/* Header */}
       <header className="header">
         <div className="brand-group">
