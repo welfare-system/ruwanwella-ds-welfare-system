@@ -41,7 +41,7 @@ router.get('/fund/summary', fundController.getFundSummary);
 // ── Members API ─────────────────────────────────────────────────────────────
 router.get('/members', memberController.getAllMembers);
 router.get('/members/:id', memberController.getMemberById);
-router.post('/members', authenticateToken, requireRole('admin'), memberController.createMember);
+router.post('/members', authenticateToken, requireRole('admin', 'member'), memberController.createMember);
 router.put('/members/:id', authenticateToken, requireRole('admin'), memberController.updateMember);
 router.delete('/members/:id', authenticateToken, requireRole('admin'), memberController.deleteMember);
 
