@@ -225,6 +225,8 @@ export default function WelfareApp() {
     monthlyContribution: 100,
     notes: "",
   });
+  const [newlyRegisteredMember, setNewlyRegisteredMember] = useState<Member | null>(null);
+  const [memberSubmitting, setMemberSubmitting] = useState(false);
 
   const [loanForm, setLoanForm] = useState({
     memberId: "",
@@ -460,18 +462,24 @@ export default function WelfareApp() {
   // ── Member Actions ────────────────────────────────────────────────────────
   const handleCreateMember = async (e: React.FormEvent) => {
     e.preventDefault();
+    setMemberSubmitting(true);
     try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (authToken) {
+        headers["Authorization"] = `Bearer ${authToken}`;
+      }
+
       const res = await fetch(`${API_BASE}/api/members`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-        },
+        headers,
         body: JSON.stringify(memberForm),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to add member");
 
+      setNewlyRegisteredMember(data.data);
       notify("success", language === "si" ? `${data.data.name} (${data.data.memberId}) සාමාජිකයා සාර්ථකව ලියාපදිංචි කරන ලදී!` : `Member ${data.data.name} (${data.data.memberId}) registered successfully!`);
       setShowAddMemberModal(false);
       setMemberForm({
@@ -484,9 +492,14 @@ export default function WelfareApp() {
         notes: "",
       });
       refreshAllData();
+      if (typeof window !== "undefined") {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       notify("error", msg);
+    } finally {
+      setMemberSubmitting(false);
     }
   };
 
@@ -1054,7 +1067,7 @@ export default function WelfareApp() {
                 onClick={() => handleLogin(undefined, "marcus.thorne@org.internal", "MemberPassword123!")}
               >
                 <strong>👤 Marcus Thorne</strong>
-                <span>{language === "si" ? "සාමාජික ස්වයං-සේවාව" : "Member Self-Service"}</span>
+                <span>{language === "si" ? "සාමාජික ලියාපදිංචි පෝරමය" : "New Member Registration Form"}</span>
               </button>
             </div>
           </div>
@@ -1082,7 +1095,7 @@ export default function WelfareApp() {
             <p>
               {isAdmin
                 ? (language === "si" ? "පරිපාලක පාලක පුවරුව" : "Administrator Control Console")
-                : (language === "si" ? `සාමාජික ස්වයං-සේවා පෝර්ටලය (${currentUser.memberId})` : `Member Self-Service Portal (${currentUser.memberId})`)}
+                : (language === "si" ? "නව සාමාජික ලියාපදිංචි කිරීමේ පෝරමය" : "New Member Registration Portal")}
             </p>
           </div>
         </div>
@@ -1159,134 +1172,316 @@ export default function WelfareApp() {
         </div>
       )}
 
-      {/* Member Guidance Banner */}
-      {!isAdmin && activeTab !== "settings" && (
-        <div className="member-banner">
-          <div>
-            <strong>{language === "si" ? "සාමාජික ස්වයං-සේවා පිවිසුම:" : "Member Self-Service Access:"}</strong>{" "}
-            {language === "si"
-              ? "ඔබගේ පුද්ගලික සුබසාධක ගිණුම් තොරතුරු, ණය පහසුකම්, ගෙවීම් ශේෂයන් සහ දායකත්ව රිසිට්පත් මෙහිදී පරීක්ෂා කළ හැක."
-              : "You are viewing your personal welfare record. You can apply for loans, track repayment balances, and inspect your monthly contribution receipts."}
+      {/* Navigation Tabs (Admin Only) */}
+      {isAdmin && (
+        <div className="nav-tabs-container">
+          <nav className="nav-tabs">
+            <button
+              className={`nav-tab ${activeTab === "overview" ? "active" : ""}`}
+              onClick={() => setActiveTab("overview")}
+            >
+              📊 {t(language, "navOverview")}
+            </button>
+
+            <button
+              className={`nav-tab ${activeTab === "members" ? "active" : ""}`}
+              onClick={() => setActiveTab("members")}
+            >
+              👥 {t(language, "navMembers")}
+              <span className="nav-tab-badge">{members.length}</span>
+            </button>
+
+            <button
+              className={`nav-tab ${activeTab === "loans" ? "active" : ""}`}
+              onClick={() => setActiveTab("loans")}
+            >
+              💳 {t(language, "navLoans")}
+              <span className="nav-tab-badge">{visibleLoans.length}</span>
+            </button>
+
+            <button
+              className={`nav-tab ${activeTab === "contributions" ? "active" : ""}`}
+              onClick={() => setActiveTab("contributions")}
+            >
+              📑 {t(language, "navContributions")}
+              <span className="nav-tab-badge">{visibleContributions.length}</span>
+            </button>
+
+            <button
+              className={`nav-tab ${activeTab === "finance" ? "active" : ""}`}
+              onClick={() => setActiveTab("finance")}
+            >
+              💰 {t(language, "navFinance")}
+              <span className="nav-tab-badge">{transactions.length}</span>
+            </button>
+
+            <button
+              className={`nav-tab ${activeTab === "settings" ? "active" : ""}`}
+              onClick={() => setActiveTab("settings")}
+            >
+              ⚙️ {t(language, "navSettings")}
+            </button>
+          </nav>
+
+          <div className="toolbar-actions">
+            {activeTab === "members" && (
+              <button className="btn btn-primary" onClick={() => setShowAddMemberModal(true)}>
+                {t(language, "registerMemberBtn")}
+              </button>
+            )}
+            {activeTab === "loans" && (
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  const defaultMemId = currentUser?.memberId || members[0]?.memberId || "";
+                  setLoanForm((prev) => ({ ...prev, memberId: defaultMemId }));
+                  setShowApplyLoanModal(true);
+                }}
+              >
+                {t(language, "applyLoanBtn")}
+              </button>
+            )}
+            {activeTab === "contributions" && (
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  if (members.length > 0 && !contributionForm.memberId) {
+                    setContributionForm((prev) => ({ ...prev, memberId: members[0].memberId }));
+                  }
+                  setShowRecordContributionModal(true);
+                }}
+              >
+                {t(language, "recordContributionBtn")}
+              </button>
+            )}
+            {activeTab === "finance" && (
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  className="btn"
+                  style={{ background: "rgba(16, 185, 129, 0.18)", border: "1px solid rgba(16, 185, 129, 0.4)", color: "#34d399", fontWeight: 700 }}
+                  onClick={() => setShowRecordIncomeModal(true)}
+                >
+                  {t(language, "recordIncomeBtn")}
+                </button>
+                <button
+                  className="btn"
+                  style={{ background: "rgba(239, 68, 68, 0.18)", border: "1px solid rgba(239, 68, 68, 0.4)", color: "#f87171", fontWeight: 700 }}
+                  onClick={() => setShowRecordExpenseModal(true)}
+                >
+                  {t(language, "recordExpenseBtn")}
+                </button>
+              </div>
+            )}
           </div>
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={() => {
-              setLoanForm((prev) => ({ ...prev, memberId: currentUser.memberId || "" }));
-              setShowApplyLoanModal(true);
-            }}
-          >
-            {t(language, "applyLoanBtn")}
-          </button>
         </div>
       )}
 
-      {/* Navigation Tabs */}
-      <div className="nav-tabs-container">
-        <nav className="nav-tabs">
-          <button
-            className={`nav-tab ${activeTab === "overview" ? "active" : ""}`}
-            onClick={() => setActiveTab("overview")}
-          >
-            📊 {isAdmin ? t(language, "navOverview") : t(language, "mySummary")}
-          </button>
-
-          <button
-            className={`nav-tab ${activeTab === "members" ? "active" : ""}`}
-            onClick={() => setActiveTab("members")}
-          >
-            👥 {t(language, "navMembers")}
-            {isAdmin && <span className="nav-tab-badge">{members.length}</span>}
-          </button>
-
-          <button
-            className={`nav-tab ${activeTab === "loans" ? "active" : ""}`}
-            onClick={() => setActiveTab("loans")}
-          >
-            💳 {isAdmin ? t(language, "navLoans") : t(language, "myLoans")}
-            <span className="nav-tab-badge">{visibleLoans.length}</span>
-          </button>
-
-          <button
-            className={`nav-tab ${activeTab === "contributions" ? "active" : ""}`}
-            onClick={() => setActiveTab("contributions")}
-          >
-            📑 {isAdmin ? t(language, "navContributions") : t(language, "myReceipts")}
-            <span className="nav-tab-badge">{visibleContributions.length}</span>
-          </button>
-
-          <button
-            className={`nav-tab ${activeTab === "finance" ? "active" : ""}`}
-            onClick={() => setActiveTab("finance")}
-          >
-            💰 {t(language, "navFinance")}
-            <span className="nav-tab-badge">{transactions.length}</span>
-          </button>
-
-          <button
-            className={`nav-tab ${activeTab === "settings" ? "active" : ""}`}
-            onClick={() => setActiveTab("settings")}
-          >
-            ⚙️ {t(language, "navSettings")}
-          </button>
-        </nav>
-
-        <div className="toolbar-actions">
-          {isAdmin && activeTab === "members" && (
-            <button className="btn btn-primary" onClick={() => setShowAddMemberModal(true)}>
-              {t(language, "registerMemberBtn")}
-            </button>
-          )}
-          {activeTab === "loans" && (
-            <button
-              className="btn btn-primary"
-              onClick={() => {
-                const defaultMemId = currentUser?.memberId || members[0]?.memberId || "";
-                setLoanForm((prev) => ({ ...prev, memberId: defaultMemId }));
-                setShowApplyLoanModal(true);
+      {!isAdmin ? (
+        /* Standalone New Member Registration Form (Exclusively displayed for regular users) */
+        <div style={{ width: "100%", maxWidth: "100%", marginTop: "1rem" }}>
+          {newlyRegisteredMember && (
+            <div
+              style={{
+                background: "linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(5, 150, 105, 0.25))",
+                border: "1px solid rgba(16, 185, 129, 0.4)",
+                borderRadius: "16px",
+                padding: "24px 28px",
+                marginBottom: "24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: "16px",
+                boxShadow: "0 10px 30px rgba(16, 185, 129, 0.15)",
               }}
             >
-              {t(language, "applyLoanBtn")}
-            </button>
-          )}
-          {isAdmin && activeTab === "contributions" && (
-            <button
-              className="btn btn-primary"
-              onClick={() => {
-                if (members.length > 0 && !contributionForm.memberId) {
-                  setContributionForm((prev) => ({ ...prev, memberId: members[0].memberId }));
-                }
-                setShowRecordContributionModal(true);
-              }}
-            >
-              {t(language, "recordContributionBtn")}
-            </button>
-          )}
-          {activeTab === "finance" && (
-            <div style={{ display: "flex", gap: "10px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                <div
+                  style={{
+                    width: "52px",
+                    height: "52px",
+                    borderRadius: "50%",
+                    background: "#10b981",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "1.6rem",
+                    color: "#fff",
+                    fontWeight: "bold",
+                    flexShrink: 0,
+                  }}
+                >
+                  ✓
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 700, color: "#ecfdf5" }}>
+                    {language === "si" ? "සාමාජික ලියාපදිංචිය සාර්ථකයි!" : "Registration Successful!"}
+                  </h3>
+                  <p style={{ margin: "4px 0 0 0", color: "#a7f3d0", fontSize: "0.92rem" }}>
+                    {language === "si"
+                      ? `${newlyRegisteredMember.name} සාර්ථකව පද්ධතියට එක් කරන ලදී. නව සාමාජික හැඳුනුම් අංකය:`
+                      : `${newlyRegisteredMember.name} has been enrolled into the welfare fund. New Member ID:`}
+                    <strong style={{ marginLeft: "8px", fontFamily: "var(--font-mono)", fontSize: "1.05rem", color: "#fff", background: "rgba(0,0,0,0.25)", padding: "2px 8px", borderRadius: "6px" }}>
+                      {newlyRegisteredMember.memberId}
+                    </strong>
+                  </p>
+                </div>
+              </div>
               <button
-                className="btn"
-                style={{ background: "rgba(16, 185, 129, 0.18)", border: "1px solid rgba(16, 185, 129, 0.4)", color: "#34d399", fontWeight: 700 }}
-                onClick={() => setShowRecordIncomeModal(true)}
+                className="btn btn-secondary"
+                style={{ background: "rgba(255,255,255,0.1)", borderColor: "rgba(255,255,255,0.2)", color: "#fff" }}
+                onClick={() => setNewlyRegisteredMember(null)}
               >
-                {t(language, "recordIncomeBtn")}
-              </button>
-              <button
-                className="btn"
-                style={{ background: "rgba(239, 68, 68, 0.18)", border: "1px solid rgba(239, 68, 68, 0.4)", color: "#f87171", fontWeight: 700 }}
-                onClick={() => setShowRecordExpenseModal(true)}
-              >
-                {t(language, "recordExpenseBtn")}
+                ✕ {language === "si" ? "වසන්න" : "Dismiss"}
               </button>
             </div>
           )}
-        </div>
-      </div>
 
-      {/* Top Metrics Grid (Hidden on Settings, and hidden on Members tab for regular members) */}
-      {activeTab !== "settings" && (isAdmin || activeTab !== "members") && (
-        <div className="metrics-grid">
-          {isAdmin ? (
-            <>
+          <div className="glass-panel" style={{ width: "100%", margin: "0 auto", padding: "28px" }}>
+            <div className="panel-header" style={{ borderBottom: "1px solid var(--border-subtle)", paddingBottom: "18px", marginBottom: "24px" }}>
+              <div className="panel-title-group">
+                <h2 style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "1.4rem" }}>
+                  <span>👤</span>
+                  {language === "si" ? "නව සුබසාධක සාමාජිකයෙකු ලියාපදිංචි කිරීමේ පෝරමය" : "New Member Registration Form"}
+                </h2>
+                <p style={{ marginTop: "6px", fontSize: "0.95rem" }}>
+                  {language === "si"
+                    ? "නව සාමාජික තොරතුරු සහ මාසික දායකත්ව විස්තර ඇතුළත් කර සුබසාධක පද්ධතියට ලියාපදිංචි වන්න."
+                    : "Enter new member details and monthly contribution pledge to enroll in the staff welfare fund."}
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleCreateMember}>
+              <div className="form-grid">
+                <div className="form-group full">
+                  <label className="form-label">{language === "si" ? "සම්පූර්ණ නම *" : "Full Name *"}</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder={language === "si" ? "උදා: කේ. ඒ. නිමල් පෙරේරා" : "e.g. Dr. Jane Foster"}
+                    required
+                    value={memberForm.name}
+                    onChange={(e) => setMemberForm({ ...memberForm, name: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">{language === "si" ? "විද්‍යුත් තැපැල් ලිපිනය (විකල්පයි)" : "Email Address (Optional)"}</label>
+                  <input
+                    type="email"
+                    className="form-input"
+                    placeholder="nimal.perera@org.internal"
+                    value={memberForm.email}
+                    onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">{language === "si" ? "දුරකථන අංකය *" : "Phone Number *"}</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="077 123 4567"
+                    required
+                    value={memberForm.phone}
+                    onChange={(e) => setMemberForm({ ...memberForm, phone: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">{t(language, "departmentLabel")}</label>
+                  <select
+                    className="form-select"
+                    value={memberForm.department}
+                    onChange={(e) => setMemberForm({ ...memberForm, department: e.target.value })}
+                  >
+                    <option value="Logistics & Transport">{language === "si" ? "ප්‍රවාහන සහ සැපයුම්" : "Logistics & Transport"}</option>
+                    <option value="Medical Operations">{language === "si" ? "වෛද්‍ය මෙහෙයුම්" : "Medical Operations"}</option>
+                    <option value="Information Technology">{language === "si" ? "තොරතුරු තාක්ෂණ (IT)" : "Information Technology"}</option>
+                    <option value="Human Resources">{language === "si" ? "මානව සම්පත්" : "Human Resources"}</option>
+                    <option value="Field Research">{language === "si" ? "ක්ෂේත්‍ර පර්යේෂණ" : "Field Research"}</option>
+                    <option value="Administration">{language === "si" ? "පරිපාලන අංශය" : "Administration"}</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">{language === "si" ? "සුබසාධක සංගමයේ තනතුර" : "Role in Welfare"}</label>
+                  <select
+                    className="form-select"
+                    value={memberForm.role}
+                    onChange={(e) => setMemberForm({ ...memberForm, role: e.target.value })}
+                  >
+                    <option value="Member">{language === "si" ? "සාමාන්‍ය සාමාජික" : "General Member"}</option>
+                    <option value="Executive">{language === "si" ? "විධායක කමිටු සාමාජික" : "Executive Committee"}</option>
+                    <option value="Treasurer">{language === "si" ? "භාණ්ඩාගාරික / විගණක" : "Treasurer / Auditor"}</option>
+                    <option value="Chairperson">{language === "si" ? "සභාපති" : "Chairperson"}</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">{language === "si" ? `මාසික දායකත්ව පොරොන්දුව (${curr}) *` : `Monthly Pledge (${curr}) *`}</label>
+                  <input
+                    type="number"
+                    min="10"
+                    step="10"
+                    className="form-input"
+                    required
+                    value={memberForm.monthlyContribution}
+                    onChange={(e) => setMemberForm({ ...memberForm, monthlyContribution: Number(e.target.value) })}
+                  />
+                </div>
+
+                <div className="form-group full">
+                  <label className="form-label">{language === "si" ? "සටහන් / අනුබද්ධතාවය" : "Notes / Affiliation"}</label>
+                  <textarea
+                    className="form-textarea"
+                    placeholder={language === "si" ? "විශේෂ සටහන්, බඳවා ගැනීමේ තොරතුරු..." : "Special notes, enrollment context..."}
+                    rows={3}
+                    value={memberForm.notes}
+                    onChange={(e) => setMemberForm({ ...memberForm, notes: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "24px", paddingTop: "16px", borderTop: "1px solid var(--border-subtle)" }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={memberSubmitting}
+                  onClick={() =>
+                    setMemberForm({
+                      name: "",
+                      email: "",
+                      phone: "",
+                      department: "Logistics & Transport",
+                      role: "Member",
+                      monthlyContribution: systemSettings.defaultContributionRate || 100,
+                      notes: "",
+                    })
+                  }
+                >
+                  {language === "si" ? "පිරිසිදු කරන්න" : "Clear Form"}
+                </button>
+                <button type="submit" className="btn btn-primary" style={{ minWidth: "200px" }} disabled={memberSubmitting}>
+                  {memberSubmitting ? (
+                    <span>⏳ {language === "si" ? "ලියාපදිංචි වෙමින් පවතී..." : "Registering..."}</span>
+                  ) : (
+                    <>
+                      <span>✓</span> {language === "si" ? "ලියාපදිංචි කරන්න" : "Submit Registration"}
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : (
+        /* Administrator Dashboard Tabs Console */
+        <>
+          {/* Top Metrics Grid */}
+          {activeTab !== "settings" && (
+            <div className="metrics-grid">
               <div className="metric-card">
                 <div className="metric-header">
                   <span className="metric-label">{t(language, "cashPool")}</span>
@@ -1333,72 +1528,12 @@ export default function WelfareApp() {
                   {fund ? `${fund.activeMembers} ${language === "si" ? "සක්‍රීය" : "active"} • ${fund.pendingLoansCount} ${language === "si" ? "පොරොත්තුවේ ඇති ණය" : "pending loans"}` : "..."}
                 </div>
               </div>
-            </>
-          ) : (
-            <>
-              <div className="metric-card">
-                <div className="metric-header">
-                  <span className="metric-label">{language === "si" ? "මගේ මුළු දායකත්වය" : "My Lifetime Contributions"}</span>
-                  <div className="metric-icon icon-emerald">💰</div>
-                </div>
-                <div className="metric-value" style={{ color: "#34d399" }}>
-                  {curr}
-                  {activeMemberProfile ? activeMemberProfile.totalContributed.toLocaleString() : "0"}
-                </div>
-                <div className="metric-subtext">{language === "si" ? "අරමුදලට තැන්පත් කළ මුළු මුදල" : "Total Deposited into Welfare Fund"}</div>
-              </div>
-
-              <div className="metric-card">
-                <div className="metric-header">
-                  <span className="metric-label">{language === "si" ? "මගේ සක්‍රීය ණය ශේෂය" : "My Active Loan Debt"}</span>
-                  <div className="metric-icon icon-amber">💳</div>
-                </div>
-                <div className="metric-value" style={{ color: "#fbbf24" }}>
-                  {curr}
-                  {visibleLoans
-                    .filter((l) => l.status === "Active")
-                    .reduce((acc, l) => acc + l.remainingBalance, 0)
-                    .toFixed(2)}
-                </div>
-                <div className="metric-subtext">
-                  {visibleLoans.filter((l) => l.status === "Active").length} {language === "si" ? "සක්‍රීය ණය පහසුකම්" : "active loan(s)"}
-                </div>
-              </div>
-
-              <div className="metric-card">
-                <div className="metric-header">
-                  <span className="metric-label">{language === "si" ? "මාසික දායකත්ව මුදල" : "Monthly Pledge"}</span>
-                  <div className="metric-icon icon-blue">📅</div>
-                </div>
-                <div className="metric-value">
-                  {curr}
-                  {activeMemberProfile ? activeMemberProfile.monthlyContribution : systemSettings.defaultContributionRate}
-                </div>
-                <div className="metric-subtext">{language === "si" ? "ස්වයංක්‍රීය වැටුප් අඩුකිරීම්" : "Auto-deducted per payroll cycle"}</div>
-              </div>
-
-              <div className="metric-card">
-                <div className="metric-header">
-                  <span className="metric-label">{language === "si" ? "සාමාජිකත්ව තත්ත්වය" : "Membership Status"}</span>
-                  <div className="metric-icon icon-purple">✓</div>
-                </div>
-                <div className="metric-value" style={{ fontSize: "1.6rem" }}>
-                  {activeMemberProfile ? (activeMemberProfile.status === "Active" ? (language === "si" ? "සක්‍රීය" : "Active") : activeMemberProfile.status) : (language === "si" ? "සක්‍රීය" : "Active")}
-                </div>
-                <div className="metric-subtext">
-                  {language === "si" ? "ලියාපදිංචිය:" : "Joined:"} {activeMemberProfile ? activeMemberProfile.joinDate : "2024"}
-                </div>
-              </div>
-            </>
+            </div>
           )}
-        </div>
-      )}
 
       {/* ── TAB 1: OVERVIEW ───────────────────────────────────────────────── */}
       {activeTab === "overview" && (
-        <div>
-          {isAdmin ? (
-            <div className="overview-grid">
+        <div className="overview-grid">
               {/* Fund Accounting Breakdown */}
               <div className="glass-panel">
                 <div className="panel-header">
@@ -1585,113 +1720,13 @@ export default function WelfareApp() {
                       ))}
                   </div>
                 )}
-              </div>
             </div>
-          ) : (
-            /* Member Overview */
-            <div className="overview-grid">
-              <div className="glass-panel">
-                <div className="panel-header">
-                  <div className="panel-title-group">
-                    <h2>{language === "si" ? "මගේ සක්‍රීය සුබසාධක ණය" : "My Active Welfare Loans"}</h2>
-                    <p>{language === "si" ? "වත්මන් ආපසු ගෙවීමේ ප්‍රගතිය සහ ගෙවිය යුතු ශේෂයන්" : "Current repayment progress and due balances"}</p>
-                  </div>
-                  <button
-                    className="btn btn-primary btn-sm"
-                    onClick={() => {
-                      setLoanForm((prev) => ({ ...prev, memberId: currentUser.memberId || "" }));
-                      setShowApplyLoanModal(true);
-                    }}
-                  >
-                    {language === "si" ? "+ නව ණයක්" : "+ New Loan"}
-                  </button>
-                </div>
-
-                {visibleLoans.filter((l) => l.status === "Active").length === 0 ? (
-                  <div className="empty-state">
-                    <p>{language === "si" ? "ඔබට මේ අවස්ථාවේ සක්‍රීය ණය නොමැත." : "You have no active loans at this time."}</p>
-                  </div>
-                ) : (
-                  visibleLoans
-                    .filter((l) => l.status === "Active")
-                    .map((loan) => {
-                      const percentRepaid = Math.round((loan.amountRepaid / loan.totalRepayable) * 100);
-                      return (
-                        <div key={loan.id} className="item-card" style={{ flexDirection: "column", gap: "10px", marginBottom: "12px" }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
-                            <div>
-                              <strong>{loan.loanId}</strong> — {loan.purpose}
-                              <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                                {language === "si" ? "ඊළඟ වාරිකය:" : "Next Due:"} {loan.nextDueDate || (language === "si" ? "ඉදිරියේදී" : "Upcoming")}
-                              </div>
-                            </div>
-                            <span className="badge badge-active">{t(language, "statusActive")}</span>
-                          </div>
-
-                          <div className="progress-container">
-                            <div className="progress-track">
-                              <div className="progress-fill" style={{ width: `${percentRepaid}%` }} />
-                            </div>
-                            <div className="progress-labels">
-                              <span>{language === "si" ? "ගෙවූ මුදල:" : "Repaid:"} {curr}{loan.amountRepaid.toFixed(2)}</span>
-                              <span>{percentRepaid}%</span>
-                            </div>
-                          </div>
-
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "#fbbf24" }}>
-                              {language === "si" ? "ඉතිරි ශේෂය:" : "Balance:"} {curr}{loan.remainingBalance.toFixed(2)}
-                            </span>
-                            <span style={{ fontSize: "0.82rem", color: "var(--accent-cyan)" }}>
-                              {language === "si" ? "මාසික වාරිකය:" : "Monthly EMI:"} {curr}{loan.monthlyPayment.toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })
-                )}
-              </div>
-
-              <div className="glass-panel">
-                <div className="panel-header">
-                  <div className="panel-title-group">
-                    <h2>{language === "si" ? "මෑත කාලීන දායකත්ව තැන්පතු" : "Recent Contribution Deposits"}</h2>
-                    <p>{language === "si" ? "ඔබගේ සටහන් වූ මාසික සුබසාධක දායකත්ව" : "Your recorded monthly welfare contributions"}</p>
-                  </div>
-                </div>
-
-                {visibleContributions.length === 0 ? (
-                  <div className="empty-state">
-                    <p>{language === "si" ? "සටහන් වූ දායකත්ව හමු නොවීය." : "No recorded contributions found."}</p>
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                    {visibleContributions.slice(0, 5).map((c) => (
-                      <div key={c.id} className="endpoint-row">
-                        <div>
-                          <strong>{c.receiptNo}</strong> • {c.monthCovered}
-                          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                            {language === "si" ? `${c.paymentDate} දින ${c.paymentMethod} හරහා` : `Via ${c.paymentMethod} on ${c.paymentDate}`}
-                          </div>
-                        </div>
-                        <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "#34d399" }}>
-                          +{curr}{c.amount.toFixed(2)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
+          </div>
       )}
 
-      {/* ── TAB 2: MEMBERS DIRECTORY & REGISTRATION ─────────────────────────── */}
+      {/* ── TAB 2: MEMBERS DIRECTORY ────────────────────────────────────────── */}
       {activeTab === "members" && (
-        isAdmin ? (
-          /* System Administrator / Admin View: Full Member Directory Table */
-          <div className="glass-panel">
+        <div className="glass-panel">
             <div className="panel-header">
               <div className="panel-title-group">
                 <h2>{t(language, "membersTitle")}</h2>
@@ -1838,140 +1873,6 @@ export default function WelfareApp() {
               </table>
             </div>
           </div>
-        ) : (
-          /* Regular Member View: Full member list table is HIDDEN; displays new member add form only */
-          <div className="glass-panel" style={{ maxWidth: "860px", margin: "0 auto" }}>
-            <div className="panel-header" style={{ borderBottom: "1px solid var(--border-subtle)", paddingBottom: "18px", marginBottom: "24px" }}>
-              <div className="panel-title-group">
-                <h2 style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <span>👤</span>
-                  {language === "si" ? "නව සුබසාධක සාමාජිකයෙකු ලියාපදිංචි කිරීම" : "Register New Welfare Member"}
-                </h2>
-                <p style={{ marginTop: "4px" }}>
-                  {language === "si"
-                    ? "නව සාමාජික තොරතුරු සහ මාසික දායකත්ව විස්තර ඇතුළත් කර සුබසාධක පද්ධතියට ලියාපදිංචි කරන්න."
-                    : "Enter new member details and monthly contribution pledge to enroll in the staff welfare fund."}
-                </p>
-              </div>
-            </div>
-
-            <form onSubmit={handleCreateMember}>
-              <div className="form-grid">
-                <div className="form-group full">
-                  <label className="form-label">{language === "si" ? "සම්පූර්ණ නම *" : "Full Name *"}</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder={language === "si" ? "උදා: කේ. ඒ. නිමල් පෙරේරා" : "e.g. Dr. Jane Foster"}
-                    required
-                    value={memberForm.name}
-                    onChange={(e) => setMemberForm({ ...memberForm, name: e.target.value })}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">{language === "si" ? "විද්‍යුත් තැපැල් ලිපිනය (විකල්පයි)" : "Email Address (Optional)"}</label>
-                  <input
-                    type="email"
-                    className="form-input"
-                    placeholder="nimal.perera@org.internal"
-                    value={memberForm.email}
-                    onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">{language === "si" ? "දුරකථන අංකය *" : "Phone Number *"}</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="077 123 4567"
-                    required
-                    value={memberForm.phone}
-                    onChange={(e) => setMemberForm({ ...memberForm, phone: e.target.value })}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">{t(language, "departmentLabel")}</label>
-                  <select
-                    className="form-select"
-                    value={memberForm.department}
-                    onChange={(e) => setMemberForm({ ...memberForm, department: e.target.value })}
-                  >
-                    <option value="Logistics & Transport">{language === "si" ? "ප්‍රවාහන සහ සැපයුම්" : "Logistics & Transport"}</option>
-                    <option value="Medical Operations">{language === "si" ? "වෛද්‍ය මෙහෙයුම්" : "Medical Operations"}</option>
-                    <option value="Information Technology">{language === "si" ? "තොරතුරු තාක්ෂණ (IT)" : "Information Technology"}</option>
-                    <option value="Human Resources">{language === "si" ? "මානව සම්පත්" : "Human Resources"}</option>
-                    <option value="Field Research">{language === "si" ? "ක්ෂේත්‍ර පර්යේෂණ" : "Field Research"}</option>
-                    <option value="Administration">{language === "si" ? "පරිපාලන අංශය" : "Administration"}</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">{language === "si" ? "සුබසාධක සංගමයේ තනතුර" : "Role in Welfare"}</label>
-                  <select
-                    className="form-select"
-                    value={memberForm.role}
-                    onChange={(e) => setMemberForm({ ...memberForm, role: e.target.value })}
-                  >
-                    <option value="Member">{language === "si" ? "සාමාන්‍ය සාමාජික" : "General Member"}</option>
-                    <option value="Executive">{language === "si" ? "විධායක කමිටු සාමාජික" : "Executive Committee"}</option>
-                    <option value="Treasurer">{language === "si" ? "භාණ්ඩාගාරික / විගණක" : "Treasurer / Auditor"}</option>
-                    <option value="Chairperson">{language === "si" ? "සභාපති" : "Chairperson"}</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">{language === "si" ? `මාසික දායකත්ව පොරොන්දුව (${curr}) *` : `Monthly Pledge (${curr}) *`}</label>
-                  <input
-                    type="number"
-                    min="10"
-                    step="10"
-                    className="form-input"
-                    required
-                    value={memberForm.monthlyContribution}
-                    onChange={(e) => setMemberForm({ ...memberForm, monthlyContribution: Number(e.target.value) })}
-                  />
-                </div>
-
-                <div className="form-group full">
-                  <label className="form-label">{language === "si" ? "සටහන් / අනුබද්ධතාවය" : "Notes / Affiliation"}</label>
-                  <textarea
-                    className="form-textarea"
-                    placeholder={language === "si" ? "විශේෂ සටහන්, බඳවා ගැනීමේ තොරතුරු..." : "Special notes, enrollment context..."}
-                    rows={3}
-                    value={memberForm.notes}
-                    onChange={(e) => setMemberForm({ ...memberForm, notes: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "24px", paddingTop: "16px", borderTop: "1px solid var(--border-subtle)" }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() =>
-                    setMemberForm({
-                      name: "",
-                      email: "",
-                      phone: "",
-                      department: "Logistics & Transport",
-                      role: "Member",
-                      monthlyContribution: systemSettings.defaultContributionRate || 100,
-                      notes: "",
-                    })
-                  }
-                >
-                  {language === "si" ? "පිරිසිදු කරන්න" : "Clear Form"}
-                </button>
-                <button type="submit" className="btn btn-primary" style={{ minWidth: "180px" }}>
-                  <span>✓</span> {language === "si" ? "සුරකින්න සහ ලියාපදිංචි කරන්න" : "Save & Register Member"}
-                </button>
-              </div>
-            </form>
-          </div>
-        )
       )}
 
       {/* ── TAB 3: LOANS TRACKER ───────────────────────────────────────────── */}
@@ -2855,6 +2756,8 @@ export default function WelfareApp() {
             </div>
           )}
         </div>
+      )}
+        </>
       )}
 
       {/* ── MODALS ─────────────────────────────────────────────────────────── */}
