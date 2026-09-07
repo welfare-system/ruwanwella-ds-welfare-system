@@ -1233,11 +1233,6 @@ export default function WelfareApp() {
         </nav>
 
         <div className="toolbar-actions">
-          {isAdmin && activeTab === "members" && (
-            <button className="btn btn-primary" onClick={() => setShowAddMemberModal(true)}>
-              {t(language, "registerMemberBtn")}
-            </button>
-          )}
           {activeTab === "loans" && (
             <button
               className="btn btn-primary"
@@ -1284,8 +1279,8 @@ export default function WelfareApp() {
         </div>
       </div>
 
-      {/* Top Metrics Grid (Only shown when not in Settings tab for a clean focused settings view) */}
-      {activeTab !== "settings" && (
+      {/* Top Metrics Grid (Hidden on Settings and Members tabs for clean focused views) */}
+      {activeTab !== "settings" && activeTab !== "members" && (
         <div className="metrics-grid">
           {isAdmin ? (
             <>
@@ -1689,154 +1684,139 @@ export default function WelfareApp() {
         </div>
       )}
 
-      {/* ── TAB 2: MEMBERS DIRECTORY (Admin Only) ──────────────────────────── */}
+      {/* ── TAB 2: MEMBER DASHBOARD (New Member Registration Form Only) ──────── */}
       {isAdmin && activeTab === "members" && (
-        <div className="glass-panel">
-          <div className="panel-header">
+        <div className="glass-panel" style={{ maxWidth: "860px", margin: "0 auto" }}>
+          <div className="panel-header" style={{ borderBottom: "1px solid var(--border-subtle)", paddingBottom: "18px", marginBottom: "24px" }}>
             <div className="panel-title-group">
-              <h2>{t(language, "membersTitle")}</h2>
-              <p>{t(language, "membersSubtitle")}</p>
+              <h2 style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span>👤</span>
+                {language === "si" ? "නව සුබසාධක සාමාජිකයෙකු ලියාපදිංචි කිරීම" : "Register New Welfare Member"}
+              </h2>
+              <p style={{ marginTop: "4px" }}>
+                {language === "si"
+                  ? "නව සාමාජික තොරතුරු සහ මාසික දායකත්ව විස්තර ඇතුළත් කර සුබසාධක පද්ධතියට ලියාපදිංචි කරන්න."
+                  : "Enter new member details and monthly contribution pledge to enroll in the staff welfare fund."}
+              </p>
             </div>
-            <button className="btn btn-primary" onClick={() => setShowAddMemberModal(true)}>
-              {t(language, "registerMemberBtn")}
-            </button>
           </div>
 
-          {/* Search & Filter Bar */}
-          <div className="filter-bar">
-            <div className="search-box">
-              <span className="search-icon">🔍</span>
-              <input
-                type="text"
-                className="search-input"
-                placeholder={t(language, "searchMembersPlaceholder")}
-                value={memberSearch}
-                onChange={(e) => setMemberSearch(e.target.value)}
-              />
+          <form onSubmit={handleCreateMember}>
+            <div className="form-grid">
+              <div className="form-group full">
+                <label className="form-label">{language === "si" ? "සම්පූර්ණ නම *" : "Full Name *"}</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder={language === "si" ? "උදා: කේ. ඒ. නිමල් පෙරේරා" : "e.g. Dr. Jane Foster"}
+                  required
+                  value={memberForm.name}
+                  onChange={(e) => setMemberForm({ ...memberForm, name: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">{language === "si" ? "විද්‍යුත් තැපැල් ලිපිනය *" : "Email Address *"}</label>
+                <input
+                  type="email"
+                  className="form-input"
+                  placeholder="nimal.perera@org.internal"
+                  required
+                  value={memberForm.email}
+                  onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">{language === "si" ? "දුරකථන අංකය *" : "Phone Number *"}</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="077 123 4567"
+                  required
+                  value={memberForm.phone}
+                  onChange={(e) => setMemberForm({ ...memberForm, phone: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">{t(language, "departmentLabel")}</label>
+                <select
+                  className="form-select"
+                  value={memberForm.department}
+                  onChange={(e) => setMemberForm({ ...memberForm, department: e.target.value })}
+                >
+                  <option value="Logistics & Transport">{language === "si" ? "ප්‍රවාහන සහ සැපයුම්" : "Logistics & Transport"}</option>
+                  <option value="Medical Operations">{language === "si" ? "වෛද්‍ය මෙහෙයුම්" : "Medical Operations"}</option>
+                  <option value="Information Technology">{language === "si" ? "තොරතුරු තාක්ෂණ (IT)" : "Information Technology"}</option>
+                  <option value="Human Resources">{language === "si" ? "මානව සම්පත්" : "Human Resources"}</option>
+                  <option value="Field Research">{language === "si" ? "ක්ෂේත්‍ර පර්යේෂණ" : "Field Research"}</option>
+                  <option value="Administration">{language === "si" ? "පරිපාලන අංශය" : "Administration"}</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">{language === "si" ? "සුබසාධක සංගමයේ තනතුර" : "Role in Welfare"}</label>
+                <select
+                  className="form-select"
+                  value={memberForm.role}
+                  onChange={(e) => setMemberForm({ ...memberForm, role: e.target.value })}
+                >
+                  <option value="Member">{language === "si" ? "සාමාන්‍ය සාමාජික" : "General Member"}</option>
+                  <option value="Executive">{language === "si" ? "විධායක කමිටු සාමාජික" : "Executive Committee"}</option>
+                  <option value="Treasurer">{language === "si" ? "භාණ්ඩාගාරික / විගණක" : "Treasurer / Auditor"}</option>
+                  <option value="Chairperson">{language === "si" ? "සභාපති" : "Chairperson"}</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">{language === "si" ? `මාසික දායකත්ව පොරොන්දුව (${curr}) *` : `Monthly Pledge (${curr}) *`}</label>
+                <input
+                  type="number"
+                  min="10"
+                  step="10"
+                  className="form-input"
+                  required
+                  value={memberForm.monthlyContribution}
+                  onChange={(e) => setMemberForm({ ...memberForm, monthlyContribution: Number(e.target.value) })}
+                />
+              </div>
+
+              <div className="form-group full">
+                <label className="form-label">{language === "si" ? "සටහන් / අනුබද්ධතාවය" : "Notes / Affiliation"}</label>
+                <textarea
+                  className="form-textarea"
+                  placeholder={language === "si" ? "විශේෂ සටහන්, බඳවා ගැනීමේ තොරතුරු..." : "Special notes, enrollment context..."}
+                  rows={3}
+                  value={memberForm.notes}
+                  onChange={(e) => setMemberForm({ ...memberForm, notes: e.target.value })}
+                />
+              </div>
             </div>
 
-            <select
-              className="filter-select"
-              value={memberDeptFilter}
-              onChange={(e) => setMemberDeptFilter(e.target.value)}
-            >
-              {departments.map((d) => (
-                <option key={d} value={d}>
-                  {d === "All"
-                    ? (language === "si" ? "දෙපාර්තමේන්තුව: සියල්ල" : "Department: All")
-                    : (language === "si" ? `දෙපාර්තමේන්තුව: ${d}` : `Department: ${d}`)}
-                </option>
-              ))}
-            </select>
-
-            <select
-              className="filter-select"
-              value={memberStatusFilter}
-              onChange={(e) => setMemberStatusFilter(e.target.value)}
-            >
-              <option value="All">{language === "si" ? "තත්ත්වය: සියල්ල" : "Status: All"}</option>
-              <option value="Active">{language === "si" ? "තත්ත්වය: සක්‍රීය" : "Status: Active"}</option>
-              <option value="Inactive">{language === "si" ? "තත්ත්වය: අක්‍රීය" : "Status: Inactive"}</option>
-              <option value="Suspended">{language === "si" ? "තත්ත්වය: අත්හිටුවූ" : "Status: Suspended"}</option>
-            </select>
-          </div>
-
-          {/* Members Table */}
-          <div className="table-swipe-hint">
-            <span>👉</span> {language === "si" ? "වගුව සම්පූර්ණයෙන් බැලීමට තිරස් අතට අනුචලනය කරන්න (Swipe)" : "Swipe horizontally to view full table details"}
-          </div>
-          <div className="data-table-container">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>{t(language, "colMemberId")}</th>
-                  <th>{language === "si" ? "නම සහ තොරතුරු" : "Name & Contact"}</th>
-                  <th>{language === "si" ? "දෙපාර්තමේන්තුව සහ තනතුර" : "Department & Role"}</th>
-                  <th>{t(language, "colMonthlyPledge")}</th>
-                  <th>{t(language, "colTotalContributed")}</th>
-                  <th>{t(language, "colStatus")}</th>
-                  <th style={{ textAlign: "right" }}>{t(language, "colActions")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredMembers.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="empty-state">
-                      {language === "si" ? "ගැළපෙන සාමාජික වාර්තා හමු නොවීය." : "No members match your current filters."}
-                    </td>
-                  </tr>
-                ) : (
-                  filteredMembers.map((m) => (
-                    <tr key={m.id}>
-                      <td style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "#a5b4fc" }}>
-                        {m.memberId}
-                      </td>
-                      <td>
-                        <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{m.name}</div>
-                        <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                          {m.email} • {m.phone}
-                        </div>
-                      </td>
-                      <td>
-                        <div style={{ color: "var(--text-secondary)" }}>{m.department}</div>
-                        <div style={{ fontSize: "0.78rem", color: "var(--accent-cyan)" }}>{m.role}</div>
-                      </td>
-                      <td style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>
-                        {curr}{m.monthlyContribution}{language === "si" ? "/මසකට" : "/mo"}
-                      </td>
-                      <td style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "#34d399" }}>
-                        {curr}{m.totalContributed.toLocaleString()}
-                      </td>
-                      <td>
-                        <span
-                          className={`badge ${
-                            m.status === "Active"
-                              ? "badge-active"
-                              : m.status === "Pending"
-                              ? "badge-pending"
-                              : m.status === "Suspended"
-                              ? "badge-rejected"
-                              : "badge-neutral"
-                          }`}
-                        >
-                          {m.status === "Active"
-                            ? t(language, "statusActive")
-                            : m.status === "Pending"
-                            ? t(language, "statusPending")
-                            : m.status === "Suspended"
-                            ? t(language, "statusSuspended")
-                            : t(language, "statusInactive")}
-                        </span>
-                      </td>
-                      <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                        <button
-                          className="btn btn-action-ghost"
-                          onClick={() => openMemberProfile(m)}
-                          title="View Profile & Financials"
-                        >
-                          {language === "si" ? "තොරතුරු" : "Profile"}
-                        </button>
-                        <button
-                          className="btn btn-action-ghost"
-                          onClick={() => openEditMemberModal(m)}
-                          title="Edit Details"
-                        >
-                          {language === "si" ? "සංස්කරණය" : "Edit"}
-                        </button>
-                        <button
-                          className="btn btn-danger-ghost"
-                          onClick={() => handleDeleteMember(m.id, m.name)}
-                          title="Remove Member"
-                        >
-                          {language === "si" ? "ඉවත් කරන්න" : "Delete"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "24px", paddingTop: "16px", borderTop: "1px solid var(--border-subtle)" }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() =>
+                  setMemberForm({
+                    name: "",
+                    email: "",
+                    phone: "",
+                    department: "Logistics & Transport",
+                    role: "Member",
+                    monthlyContribution: systemSettings.defaultContributionRate || 100,
+                    notes: "",
+                  })
+                }
+              >
+                {language === "si" ? "පිරිසිදු කරන්න" : "Clear Form"}
+              </button>
+              <button type="submit" className="btn btn-primary" style={{ minWidth: "180px" }}>
+                <span>✓</span> {language === "si" ? "සුරකින්න සහ ලියාපදිංචි කරන්න" : "Save & Register Member"}
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
