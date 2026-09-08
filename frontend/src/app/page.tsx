@@ -129,8 +129,8 @@ export default function WelfareApp() {
   const [authLoading, setAuthLoading] = useState(true);
 
   // Login form states
-  const [loginEmail, setLoginEmail] = useState("admin@welfare.org");
-  const [loginPassword, setLoginPassword] = useState("AdminPassword123!");
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
   const [loginSubmitting, setLoginSubmitting] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [serverWakingUp, setServerWakingUp] = useState(false);
@@ -456,6 +456,8 @@ export default function WelfareApp() {
     localStorage.removeItem("welfare_auth_token");
     setAuthToken(null);
     setCurrentUser(null);
+    setLoginEmail("");
+    setLoginPassword("");
     notify("info", "You have signed out successfully.");
   };
 
@@ -1059,15 +1061,6 @@ export default function WelfareApp() {
               >
                 <strong>🛡️ {language === "si" ? "පද්ධති පරිපාලක" : "System Admin"}</strong>
                 <span>{language === "si" ? "පූර්ණ පාලන පහසුකම්" : "Full System Control"}</span>
-              </button>
-
-              <button
-                type="button"
-                className="demo-account-btn"
-                onClick={() => handleLogin(undefined, "marcus.thorne@org.internal", "MemberPassword123!")}
-              >
-                <strong>👤 Marcus Thorne</strong>
-                <span>{language === "si" ? "සාමාජික ලියාපදිංචි පෝරමය" : "New Member Registration Form"}</span>
               </button>
             </div>
           </div>
