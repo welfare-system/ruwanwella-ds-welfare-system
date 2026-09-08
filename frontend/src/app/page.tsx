@@ -1057,15 +1057,6 @@ export default function WelfareApp() {
               <button
                 type="button"
                 className="demo-account-btn"
-                onClick={() => handleLogin(undefined, "admin@welfare.org", "AdminPassword123!")}
-              >
-                <strong>🛡️ {language === "si" ? "පද්ධති පරිපාලක" : "System Admin"}</strong>
-                <span>{language === "si" ? "පූර්ණ පාලන පහසුකම්" : "Full System Control"}</span>
-              </button>
-
-              <button
-                type="button"
-                className="demo-account-btn"
                 onClick={() => handleLogin(undefined, "marcus.thorne@org.internal", "MemberPassword123!")}
               >
                 <strong>📝 {language === "si" ? "සාමාජික ලියාපදිංචි පෝරමය" : "New Member Registration Form"}</strong>
