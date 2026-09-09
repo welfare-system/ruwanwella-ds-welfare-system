@@ -119,6 +119,7 @@ interface SystemSettings {
   maxLoanLimit: number;
   defaultInterestRate: number;
   autoPayrollDeduction: boolean;
+  initialReserve?: number;
 }
 
 const CURRENCY_OPTIONS = [
@@ -160,6 +161,7 @@ export default function WelfareApp() {
     maxLoanLimit: 500000,
     defaultInterestRate: 4.5,
     autoPayrollDeduction: true,
+    initialReserve: 45000,
   });
   const [loading, setLoading] = useState(true);
   const [serverOnline, setServerOnline] = useState<boolean | null>(null);
@@ -218,6 +220,21 @@ export default function WelfareApp() {
 
   const [showRecordContributionModal, setShowRecordContributionModal] = useState(false);
 
+  // Balance Management State
+  const [showBalanceModal, setShowBalanceModal] = useState(false);
+  const [balanceForm, setBalanceForm] = useState<{
+    mode: 'current' | 'reserve';
+    amount: number | string;
+    notes: string;
+    recordTransaction: boolean;
+  }>({
+    mode: 'current',
+    amount: 0,
+    notes: '',
+    recordTransaction: false
+  });
+  const [balanceSubmitting, setBalanceSubmitting] = useState(false);
+
   // Form states
   const [memberForm, setMemberForm] = useState({
     name: "",
@@ -233,6 +250,60 @@ export default function WelfareApp() {
   });
   const [newlyRegisteredMember, setNewlyRegisteredMember] = useState<Member | null>(null);
   const [memberSubmitting, setMemberSubmitting] = useState(false);
+  const [memberFormError, setMemberFormError] = useState<string | null>(null);
+
+  // Real-time duplicate validation against loaded members
+  const duplicateValidation = useMemo(() => {
+    const cleanId = memberForm.idNumber?.trim().toUpperCase() || "";
+    const cleanSewa = memberForm.sewaAnkaya?.trim().toUpperCase() || "";
+    const cleanEmail = memberForm.email?.trim().toLowerCase() || "";
+
+    // When editing a member, exclude the member being edited
+    const candidateMembers =
+      showEditMemberModal && selectedMember
+        ? members.filter(
+            (m) => m.id !== selectedMember.id && m.memberId !== selectedMember.memberId
+          )
+        : members;
+
+    const matchedId = cleanId
+      ? candidateMembers.find((m) => m.idNumber && m.idNumber.trim().toUpperCase() === cleanId)
+      : null;
+    const matchedSewa = cleanSewa
+      ? candidateMembers.find((m) => m.sewaAnkaya && m.sewaAnkaya.trim().toUpperCase() === cleanSewa)
+      : null;
+    const matchedEmail = cleanEmail
+      ? candidateMembers.find((m) => m.email && m.email.trim().toLowerCase() === cleanEmail)
+      : null;
+
+    const idError = matchedId
+      ? language === "si"
+        ? `මෙම හැඳුනුම්පත් අංකය (${memberForm.idNumber.trim()}) දැනටමත් "${matchedId.name}" (${matchedId.memberId}) සාමාජිකයා යටතේ ලියාපදිංචි කර ඇත.`
+        : `ID Number (NIC) "${memberForm.idNumber.trim()}" is already registered to "${matchedId.name}" (${matchedId.memberId}).`
+      : null;
+
+    const sewaError = matchedSewa
+      ? language === "si"
+        ? `මෙම සේවා අංකය (${memberForm.sewaAnkaya.trim()}) දැනටමත් "${matchedSewa.name}" (${matchedSewa.memberId}) සාමාජිකයා යටතේ ලියාපදිංචි කර ඇත.`
+        : `Sewa Ankaya "${memberForm.sewaAnkaya.trim()}" is already registered to "${matchedSewa.name}" (${matchedSewa.memberId}).`
+      : null;
+
+    const emailError = matchedEmail
+      ? language === "si"
+        ? `මෙම විද්‍යුත් තැපැල් ලිපිනය (${memberForm.email.trim()}) දැනටමත් "${matchedEmail.name}" (${matchedEmail.memberId}) සාමාජිකයා යටතේ ලියාපදිංචි කර ඇත.`
+        : `Email address "${memberForm.email.trim()}" is already registered to "${matchedEmail.name}" (${matchedEmail.memberId}).`
+      : null;
+
+    return {
+      hasDuplicate: Boolean(matchedId || matchedSewa || matchedEmail),
+      idError,
+      sewaError,
+      emailError,
+      matchedId,
+      matchedSewa,
+      matchedEmail,
+    };
+  }, [memberForm.idNumber, memberForm.sewaAnkaya, memberForm.email, members, language, showEditMemberModal, selectedMember]);
 
   const [loanForm, setLoanForm] = useState({
     memberId: "",
@@ -470,6 +541,22 @@ export default function WelfareApp() {
   // ── Member Actions ────────────────────────────────────────────────────────
   const handleCreateMember = async (e: React.FormEvent) => {
     e.preventDefault();
+    setMemberFormError(null);
+
+    // Client-side duplicate check: block submission if already registered
+    if (duplicateValidation.hasDuplicate) {
+      const errorMsg =
+        duplicateValidation.idError ||
+        duplicateValidation.sewaError ||
+        duplicateValidation.emailError ||
+        (language === "si"
+          ? "ද්විත්ව තොරතුරු හමුවී ඇත. කරුණාකර වෙනස් තොරතුරු භාවිතා කරන්න."
+          : "Duplicate entries detected. Please resolve duplicates before submitting.");
+      setMemberFormError(errorMsg);
+      notify("error", errorMsg);
+      return;
+    }
+
     setMemberSubmitting(true);
     try {
       const headers: Record<string, string> = {
@@ -477,6 +564,33 @@ export default function WelfareApp() {
       };
       if (authToken) {
         headers["Authorization"] = `Bearer ${authToken}`;
+      }
+
+      // Active database duplicate pre-validation check
+      try {
+        const valRes = await fetch(`${API_BASE}/api/members/validate-duplicates`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            idNumber: memberForm.idNumber,
+            sewaAnkaya: memberForm.sewaAnkaya,
+            email: memberForm.email,
+          }),
+        });
+        if (valRes.ok) {
+          const valData = await valRes.json();
+          if (valData.hasDuplicate) {
+            const dupMsg = valData.error || (language === "si"
+              ? "මෙම තොරතුරු සහිත සාමාජිකයෙකු දැනටමත් ලියාපදිංචි කර ඇත."
+              : "Duplicate member information exists in system records. Registration blocked.");
+            setMemberFormError(dupMsg);
+            notify("error", dupMsg);
+            setMemberSubmitting(false);
+            return;
+          }
+        }
+      } catch (checkErr) {
+        console.warn("Pre-check duplicate validation network check failed, continuing to authoritative save:", checkErr);
       }
 
       const payload = {
@@ -489,11 +603,16 @@ export default function WelfareApp() {
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to add member");
+      if (!res.ok) {
+        const errorMsg = data.error || (language === "si" ? "සාමාජිකයා ලියාපදිංචි කිරීම අසාර්ථක විය." : "Failed to add member");
+        setMemberFormError(errorMsg);
+        throw new Error(errorMsg);
+      }
 
       setNewlyRegisteredMember(data.data);
       notify("success", language === "si" ? `${data.data.name} (${data.data.memberId}) සාමාජිකයා සාර්ථකව ලියාපදිංචි කරන ලදී!` : `Member ${data.data.name} (${data.data.memberId}) registered successfully!`);
       setShowAddMemberModal(false);
+      setMemberFormError(null);
       setMemberForm({
         name: "",
         email: "",
@@ -512,6 +631,7 @@ export default function WelfareApp() {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
+      setMemberFormError(msg);
       notify("error", msg);
     } finally {
       setMemberSubmitting(false);
@@ -521,7 +641,80 @@ export default function WelfareApp() {
   const handleUpdateMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedMember) return;
+
+    // Client-side duplicate check against other members
+    const cleanId = memberForm.idNumber?.trim().toUpperCase() || "";
+    const cleanSewa = memberForm.sewaAnkaya?.trim().toUpperCase() || "";
+    const cleanEmail = memberForm.email?.trim().toLowerCase() || "";
+    const otherMembers = members.filter(
+      (m) => m.id !== selectedMember.id && m.memberId !== selectedMember.memberId
+    );
+
+    if (cleanId) {
+      const dup = otherMembers.find(
+        (m) => m.idNumber && m.idNumber.trim().toUpperCase() === cleanId
+      );
+      if (dup) {
+        const msg = language === "si"
+          ? `මෙම හැඳුනුම්පත් අංකය (${memberForm.idNumber.trim()}) දැනටමත් "${dup.name}" (${dup.memberId}) සාමාජිකයා යටතේ ලියාපදිංචි කර ඇත.`
+          : `ID Number (NIC) "${memberForm.idNumber.trim()}" is already registered to "${dup.name}" (${dup.memberId}).`;
+        notify("error", msg);
+        return;
+      }
+    }
+
+    if (cleanSewa) {
+      const dup = otherMembers.find(
+        (m) => m.sewaAnkaya && m.sewaAnkaya.trim().toUpperCase() === cleanSewa
+      );
+      if (dup) {
+        const msg = language === "si"
+          ? `මෙම සේවා අංකය (${memberForm.sewaAnkaya.trim()}) දැනටමත් "${dup.name}" (${dup.memberId}) සාමාජිකයා යටතේ ලියාපදිංචි කර ඇත.`
+          : `Sewa Ankaya "${memberForm.sewaAnkaya.trim()}" is already registered to "${dup.name}" (${dup.memberId}).`;
+        notify("error", msg);
+        return;
+      }
+    }
+
+    if (cleanEmail) {
+      const dup = otherMembers.find(
+        (m) => m.email && m.email.trim().toLowerCase() === cleanEmail
+      );
+      if (dup) {
+        const msg = language === "si"
+          ? `මෙම විද්‍යුත් තැපැල් ලිපිනය (${memberForm.email.trim()}) දැනටමත් "${dup.name}" (${dup.memberId}) සාමාජිකයා යටතේ ලියාපදිංචි කර ඇත.`
+          : `Email address "${memberForm.email.trim()}" is already registered to "${dup.name}" (${dup.memberId}).`;
+        notify("error", msg);
+        return;
+      }
+    }
+
     try {
+      // Server duplicate check
+      const valRes = await fetch(`${API_BASE}/api/members/validate-duplicates`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          idNumber: memberForm.idNumber,
+          sewaAnkaya: memberForm.sewaAnkaya,
+          email: memberForm.email,
+          excludeId: selectedMember.id,
+        }),
+      });
+      if (valRes.ok) {
+        const valData = await valRes.json();
+        if (valData.hasDuplicate) {
+          const dupMsg = valData.error || (language === "si"
+            ? "ද්විත්ව සාමාජික තොරතුරු පද්ධතිය තුළ පවතී."
+            : "Duplicate member information exists in system records.");
+          notify("error", dupMsg);
+          return;
+        }
+      }
+
       const payload = {
         ...memberForm,
         department: memberForm.thanthura || memberForm.department || "General Staff",
@@ -535,7 +728,7 @@ export default function WelfareApp() {
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update member");
+      if (!res.ok) throw new Error(data.error || (language === "si" ? "සාමාජික තොරතුරු යාවත්කාලීන කිරීම අසාර්ථක විය." : "Failed to update member"));
 
       notify("success", language === "si" ? `${data.data.name} සාමාජික තොරතුරු යාවත්කාලීන කරන ලදී.` : `Member ${data.data.name} updated.`);
       setShowEditMemberModal(false);
@@ -880,6 +1073,70 @@ export default function WelfareApp() {
     }
   };
 
+  // ── Balance Management Actions ─────────────────────────────────────────────
+  const openBalanceModal = (preferredMode: 'current' | 'reserve' = 'current') => {
+    setBalanceForm({
+      mode: preferredMode,
+      amount: preferredMode === 'current'
+        ? (fund ? fund.currentCashPool : 0)
+        : (fund ? fund.initialReserve : 45000),
+      notes: '',
+      recordTransaction: false,
+    });
+    setShowBalanceModal(true);
+  };
+
+  const handleUpdateBalance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBalanceSubmitting(true);
+    try {
+      const numAmount = Number(balanceForm.amount);
+      if (isNaN(numAmount) || numAmount < 0) {
+        throw new Error(
+          language === "si"
+            ? "කරුණාකර වලංගු ශේෂ මුදලක් ඇතුළත් කරන්න (0 හෝ ඊට වැඩි)."
+            : "Please enter a valid numeric amount (0 or greater)."
+        );
+      }
+
+      const payload: Record<string, unknown> = {
+        notes: balanceForm.notes,
+        recordTransaction: balanceForm.recordTransaction,
+      };
+      if (balanceForm.mode === "current") {
+        payload.currentBalance = numAmount;
+      } else {
+        payload.initialReserve = numAmount;
+      }
+
+      const res = await fetch(`${API_BASE}/api/fund/balance`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update account balance");
+
+      notify(
+        "success",
+        language === "si"
+          ? "සුබසාධක ගිණුම් ශේෂය සාර්ථකව යාවත්කාලීන කරන ලදී!"
+          : "Welfare account balance successfully updated!"
+      );
+      setShowBalanceModal(false);
+      refreshAllData();
+      fetchSystemSettings();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      notify("error", msg);
+    } finally {
+      setBalanceSubmitting(false);
+    }
+  };
+
   // ── Loan Calculator Preview ───────────────────────────────────────────────
   const loanCalcPreview = useMemo(() => {
     const p = parseFloat(String(loanForm.principalAmount)) || 0;
@@ -1094,7 +1351,7 @@ export default function WelfareApp() {
   }
 
   // ── Authenticated State: Main Dashboard ───────────────────────────────────
-  const isAdmin = currentUser.role === "admin";
+  const isAdmin = Boolean(currentUser && currentUser.role && currentUser.role.trim().toLowerCase() === "admin");
 
   return (
     <div className="app-container w-full px-4 sm:px-6 lg:px-8">
@@ -1369,6 +1626,50 @@ export default function WelfareApp() {
             </div>
 
             <form onSubmit={handleCreateMember}>
+              {duplicateValidation.hasDuplicate && (
+                <div
+                  style={{
+                    background: "rgba(239, 68, 68, 0.12)",
+                    border: "1px solid rgba(239, 68, 68, 0.4)",
+                    borderRadius: "12px",
+                    padding: "14px 18px",
+                    marginBottom: "20px",
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "12px",
+                    color: "#fca5a5",
+                  }}
+                >
+                  <span style={{ fontSize: "1.3rem", lineHeight: 1 }}>⛔</span>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "#f87171" }}>
+                      {language === "si" ? "ලියාපදිංචිය අවහිර කර ඇත (ද්විත්ව තොරතුරු හමුවිය):" : "Registration Blocked (Duplicate Entry Detected):"}
+                    </div>
+                    <div style={{ fontSize: "0.88rem", marginTop: "4px", color: "#fecaca" }}>
+                      {duplicateValidation.idError || duplicateValidation.sewaError || duplicateValidation.emailError}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {!duplicateValidation.hasDuplicate && memberFormError && (
+                <div
+                  style={{
+                    background: "rgba(239, 68, 68, 0.12)",
+                    border: "1px solid rgba(239, 68, 68, 0.4)",
+                    borderRadius: "12px",
+                    padding: "14px 18px",
+                    marginBottom: "20px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "12px",
+                    color: "#fca5a5",
+                  }}
+                >
+                  <span style={{ fontSize: "1.3rem", lineHeight: 1 }}>⚠️</span>
+                  <div style={{ fontSize: "0.9rem", color: "#fecaca" }}>{memberFormError}</div>
+                </div>
+              )}
+
               <div className="form-grid">
                 <div className="form-group full">
                   <label className="form-label">{language === "si" ? "සම්පූර්ණ නම *" : "Full Name *"}</label>
@@ -1383,7 +1684,7 @@ export default function WelfareApp() {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">
+                  <label className="form-label" style={duplicateValidation.idError ? { color: "#f87171" } : undefined}>
                     {language === "si" ? "හැඳුනුම්පත් අංකය (ID Number) *" : "ID Number (NIC) *"}
                   </label>
                   <input
@@ -1392,12 +1693,21 @@ export default function WelfareApp() {
                     placeholder={language === "si" ? "උදා: 199012345678 / 901234567V" : "e.g. 199012345678 / 901234567V"}
                     required
                     value={memberForm.idNumber}
-                    onChange={(e) => setMemberForm({ ...memberForm, idNumber: e.target.value })}
+                    style={duplicateValidation.idError ? { borderColor: "#ef4444", boxShadow: "0 0 0 3px rgba(239, 68, 68, 0.25)", background: "rgba(239, 68, 68, 0.05)" } : undefined}
+                    onChange={(e) => {
+                      setMemberForm({ ...memberForm, idNumber: e.target.value });
+                      if (memberFormError) setMemberFormError(null);
+                    }}
                   />
+                  {duplicateValidation.idError && (
+                    <div style={{ color: "#ef4444", fontSize: "0.82rem", marginTop: "6px", display: "flex", alignItems: "center", gap: "6px", fontWeight: 500 }}>
+                      <span>⚠️</span> {duplicateValidation.idError}
+                    </div>
+                  )}
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">
+                  <label className="form-label" style={duplicateValidation.sewaError ? { color: "#f87171" } : undefined}>
                     {language === "si" ? "සේවා අංකය (Sewa Ankaya) *" : "Sewa Ankaya (Service ID) *"}
                   </label>
                   <input
@@ -1406,8 +1716,17 @@ export default function WelfareApp() {
                     placeholder={language === "si" ? "උදා: SO-4089 / 12345" : "e.g. SO-4089 / 12345"}
                     required
                     value={memberForm.sewaAnkaya}
-                    onChange={(e) => setMemberForm({ ...memberForm, sewaAnkaya: e.target.value })}
+                    style={duplicateValidation.sewaError ? { borderColor: "#ef4444", boxShadow: "0 0 0 3px rgba(239, 68, 68, 0.25)", background: "rgba(239, 68, 68, 0.05)" } : undefined}
+                    onChange={(e) => {
+                      setMemberForm({ ...memberForm, sewaAnkaya: e.target.value });
+                      if (memberFormError) setMemberFormError(null);
+                    }}
                   />
+                  {duplicateValidation.sewaError && (
+                    <div style={{ color: "#ef4444", fontSize: "0.82rem", marginTop: "6px", display: "flex", alignItems: "center", gap: "6px", fontWeight: 500 }}>
+                      <span>⚠️</span> {duplicateValidation.sewaError}
+                    </div>
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -1437,14 +1756,25 @@ export default function WelfareApp() {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">{language === "si" ? "විද්‍යුත් තැපැල් ලිපිනය (විකල්පයි)" : "Email Address (Optional)"}</label>
+                  <label className="form-label" style={duplicateValidation.emailError ? { color: "#f87171" } : undefined}>
+                    {language === "si" ? "විද්‍යුත් තැපැල් ලිපිනය (විකල්පයි)" : "Email Address (Optional)"}
+                  </label>
                   <input
                     type="email"
                     className="form-input"
                     placeholder="nimal.perera@org.internal"
                     value={memberForm.email}
-                    onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
+                    style={duplicateValidation.emailError ? { borderColor: "#ef4444", boxShadow: "0 0 0 3px rgba(239, 68, 68, 0.25)", background: "rgba(239, 68, 68, 0.05)" } : undefined}
+                    onChange={(e) => {
+                      setMemberForm({ ...memberForm, email: e.target.value });
+                      if (memberFormError) setMemberFormError(null);
+                    }}
                   />
+                  {duplicateValidation.emailError && (
+                    <div style={{ color: "#ef4444", fontSize: "0.82rem", marginTop: "6px", display: "flex", alignItems: "center", gap: "6px", fontWeight: 500 }}>
+                      <span>⚠️</span> {duplicateValidation.emailError}
+                    </div>
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -1491,7 +1821,8 @@ export default function WelfareApp() {
                   type="button"
                   className="btn btn-secondary"
                   disabled={memberSubmitting}
-                  onClick={() =>
+                  onClick={() => {
+                    setMemberFormError(null);
                     setMemberForm({
                       name: "",
                       email: "",
@@ -1503,14 +1834,27 @@ export default function WelfareApp() {
                       role: "Member",
                       monthlyContribution: systemSettings.defaultContributionRate || 100,
                       notes: "",
-                    })
-                  }
+                    });
+                  }}
                 >
                   {language === "si" ? "පිරිසිදු කරන්න" : "Clear Form"}
                 </button>
-                <button type="submit" className="btn btn-primary" style={{ minWidth: "200px" }} disabled={memberSubmitting}>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{
+                    minWidth: "200px",
+                    ...(duplicateValidation.hasDuplicate ? { opacity: 0.65, cursor: "not-allowed", background: "var(--bg-card, #334155)" } : {})
+                  }}
+                  disabled={memberSubmitting || duplicateValidation.hasDuplicate}
+                  title={duplicateValidation.hasDuplicate ? (language === "si" ? "ද්විත්ව තොරතුරු පවතින බැවින් ලියාපදිංචි කළ නොහැක" : "Resolve duplicate entries to enable registration") : undefined}
+                >
                   {memberSubmitting ? (
                     <span>⏳ {language === "si" ? "ලියාපදිංචි වෙමින් පවතී..." : "Registering..."}</span>
+                  ) : duplicateValidation.hasDuplicate ? (
+                    <>
+                      <span>⛔</span> {language === "si" ? "ද්විත්ව තොරතුරු (අවහිරයි)" : "Duplicates Detected"}
+                    </>
                   ) : (
                     <>
                       <span>✓</span> {language === "si" ? "ලියාපදිංචි කරන්න" : "Submit Registration"}
@@ -1527,8 +1871,8 @@ export default function WelfareApp() {
           {/* Top Metrics Grid */}
           {activeTab !== "settings" && (
             <div className="metrics-grid">
-              <div className="metric-card">
-                <div className="metric-header">
+              <div className="metric-card" style={{ position: "relative", display: "flex", flexDirection: "column" }}>
+                <div className="metric-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <span className="metric-label">{t(language, "cashPool")}</span>
                   <div className="metric-icon icon-emerald">{curr}</div>
                 </div>
@@ -1537,6 +1881,48 @@ export default function WelfareApp() {
                   {fund ? fund.currentCashPool.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."}
                 </div>
                 <div className="metric-subtext">{t(language, "cashPoolSubtitle")}</div>
+
+                {/* Explicitly visible, enabled Admin Manage Button */}
+                {isAdmin && (
+                  <div style={{ marginTop: "auto", paddingTop: "14px", borderTop: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                    <button
+                      type="button"
+                      id="btn-manage-cash-pool"
+                      style={{
+                        width: "100%",
+                        padding: "8px 12px",
+                        fontSize: "0.82rem",
+                        fontWeight: 700,
+                        borderRadius: "8px",
+                        background: "linear-gradient(135deg, rgba(16, 185, 129, 0.22) 0%, rgba(5, 150, 105, 0.32) 100%)",
+                        border: "1px solid rgba(16, 185, 129, 0.5)",
+                        color: "#34d399",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                        transition: "all 0.2s ease",
+                        boxShadow: "0 2px 8px rgba(16, 185, 129, 0.15)",
+                        position: "relative",
+                        zIndex: 2
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = "linear-gradient(135deg, rgba(16, 185, 129, 0.35) 0%, rgba(5, 150, 105, 0.45) 100%)";
+                        e.currentTarget.style.borderColor = "#10b981";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "linear-gradient(135deg, rgba(16, 185, 129, 0.22) 0%, rgba(5, 150, 105, 0.32) 100%)";
+                        e.currentTarget.style.borderColor = "rgba(16, 185, 129, 0.5)";
+                      }}
+                      onClick={() => openBalanceModal("current")}
+                      title={language === "si" ? "ගිණුම් ශේෂය කළමනාකරණය / යාවත්කාලීන කරන්න" : "Manage / update association account balance"}
+                    >
+                      <span style={{ fontSize: "1rem" }}>⚙️</span>
+                      <span>{language === "si" ? "ගිණුම් ශේෂය කළමනාකරණය" : "Manage"}</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="metric-card">
@@ -1581,11 +1967,29 @@ export default function WelfareApp() {
         <div className="overview-grid">
               {/* Fund Accounting Breakdown */}
               <div className="glass-panel">
-                <div className="panel-header">
+                <div className="panel-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
                   <div className="panel-title-group">
                     <h2>{language === "si" ? "මූල්‍ය සෞඛ්‍යය සහ මුදල් ප්‍රවාහ ගිණුම්කරණය" : "Fund Health & Cash Flow Accounting"}</h2>
                     <p>{language === "si" ? "තැන්පතු, ණය නිකුත් කිරීම් සහ ආපසු අයවීම් විගණනය" : "Audit of deposits, disbursements, and repayments"}</p>
                   </div>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      style={{
+                        background: "linear-gradient(135deg, #059669 0%, #10b981 100%)",
+                        boxShadow: "0 4px 14px rgba(16, 185, 129, 0.25)",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px"
+                      }}
+                      onClick={() => openBalanceModal("current")}
+                      title={language === "si" ? "ගිණුම් ශේෂය කළමනාකරණය / යාවත්කාලීන කරන්න" : "Manage / update association account balance"}
+                    >
+                      <span>⚙️</span>
+                      <span>{language === "si" ? "ගිණුම් ශේෂය කළමනාකරණය" : "Manage"}</span>
+                    </button>
+                  )}
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -1683,19 +2087,47 @@ export default function WelfareApp() {
                       border: "1px solid rgba(99, 102, 241, 0.3)",
                       borderRadius: "var(--radius-md)",
                       marginTop: "8px",
+                      flexWrap: "wrap",
+                      gap: "12px"
                     }}
                   >
                     <div>
                       <strong style={{ fontSize: "1.05rem", color: "#a5b4fc" }}>
                         {language === "si" ? "වත්මන් ශුද්ධ මුදල් ශේෂය" : "Current Net Cash Balance"}
                       </strong>
-                      <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                      <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", margin: "4px 0 0 0" }}>
                         {language === "si" ? "ණය නිකුත් කිරීම සඳහා පවතින ද්‍රවශීල ප්‍රාග්ධනය" : "Liquid capital available for loan disbursement"}
                       </p>
                     </div>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "1.5rem", fontWeight: 800, color: "#ffffff" }}>
-                      {curr}{fund ? fund.currentCashPool.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "0.00"}
-                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          style={{
+                            padding: "6px 12px",
+                            fontSize: "0.8rem",
+                            borderRadius: "7px",
+                            background: "rgba(16, 185, 129, 0.18)",
+                            border: "1px solid rgba(16, 185, 129, 0.45)",
+                            color: "#34d399",
+                            cursor: "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "5px",
+                            fontWeight: 700,
+                            transition: "all 0.2s ease"
+                          }}
+                          onClick={() => openBalanceModal("current")}
+                          title={language === "si" ? "ගිණුම් ශේෂය කළමනාකරණය / යාවත්කාලීන කරන්න" : "Manage / update association account balance"}
+                        >
+                          <span>⚙️</span>
+                          <span>{language === "si" ? "ගිණුම් ශේෂය කළමනාකරණය" : "Manage"}</span>
+                        </button>
+                      )}
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "1.5rem", fontWeight: 800, color: "#ffffff" }}>
+                        {curr}{fund ? fund.currentCashPool.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "0.00"}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2782,6 +3214,23 @@ export default function WelfareApp() {
                   </div>
 
                   <div className="form-group">
+                    <label className="form-label">
+                      {language === "si" ? `ආරම්භක අරමුදල් සංචිතය (${curr})` : `Initial Capital Reserve (${curr})`}
+                    </label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      min="0"
+                      step="100"
+                      value={settingsForm.initialReserve ?? 45000}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, initialReserve: Number(e.target.value) })}
+                    />
+                    <span style={{ fontSize: "0.74rem", color: "var(--text-muted)", marginTop: "3px" }}>
+                      {language === "si" ? "සුබසාධක අරමුදලේ ආරම්භක මූලික ශේෂය" : "Baseline organizational capital reserve"}
+                    </span>
+                  </div>
+
+                  <div className="form-group">
                     <div className="toggle-group">
                       <div className="toggle-label">
                         <strong>{t(language, "autoPayrollLabel")}</strong>
@@ -2822,6 +3271,50 @@ export default function WelfareApp() {
             </div>
             <form onSubmit={handleCreateMember}>
               <div className="modal-body">
+                {duplicateValidation.hasDuplicate && (
+                  <div
+                    style={{
+                      background: "rgba(239, 68, 68, 0.12)",
+                      border: "1px solid rgba(239, 68, 68, 0.4)",
+                      borderRadius: "12px",
+                      padding: "12px 16px",
+                      marginBottom: "18px",
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: "10px",
+                      color: "#fca5a5",
+                    }}
+                  >
+                    <span style={{ fontSize: "1.2rem", lineHeight: 1 }}>⛔</span>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: "0.92rem", color: "#f87171" }}>
+                        {language === "si" ? "ලියාපදිංචිය අවහිර කර ඇත (ද්විත්ව තොරතුරු හමුවිය):" : "Registration Blocked (Duplicate Entry Detected):"}
+                      </div>
+                      <div style={{ fontSize: "0.85rem", marginTop: "4px", color: "#fecaca" }}>
+                        {duplicateValidation.idError || duplicateValidation.sewaError || duplicateValidation.emailError}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {!duplicateValidation.hasDuplicate && memberFormError && (
+                  <div
+                    style={{
+                      background: "rgba(239, 68, 68, 0.12)",
+                      border: "1px solid rgba(239, 68, 68, 0.4)",
+                      borderRadius: "12px",
+                      padding: "12px 16px",
+                      marginBottom: "18px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      color: "#fca5a5",
+                    }}
+                  >
+                    <span style={{ fontSize: "1.2rem", lineHeight: 1 }}>⚠️</span>
+                    <div style={{ fontSize: "0.88rem", color: "#fecaca" }}>{memberFormError}</div>
+                  </div>
+                )}
+
                 <div className="form-grid">
                   <div className="form-group full">
                     <label className="form-label">{language === "si" ? "සම්පූර්ණ නම *" : "Full Name *"}</label>
@@ -2836,7 +3329,7 @@ export default function WelfareApp() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">
+                    <label className="form-label" style={duplicateValidation.idError ? { color: "#f87171" } : undefined}>
                       {language === "si" ? "හැඳුනුම්පත් අංකය (ID Number) *" : "ID Number (NIC) *"}
                     </label>
                     <input
@@ -2845,12 +3338,21 @@ export default function WelfareApp() {
                       placeholder={language === "si" ? "උදා: 199012345678 / 901234567V" : "e.g. 199012345678 / 901234567V"}
                       required
                       value={memberForm.idNumber}
-                      onChange={(e) => setMemberForm({ ...memberForm, idNumber: e.target.value })}
+                      style={duplicateValidation.idError ? { borderColor: "#ef4444", boxShadow: "0 0 0 3px rgba(239, 68, 68, 0.25)", background: "rgba(239, 68, 68, 0.05)" } : undefined}
+                      onChange={(e) => {
+                        setMemberForm({ ...memberForm, idNumber: e.target.value });
+                        if (memberFormError) setMemberFormError(null);
+                      }}
                     />
+                    {duplicateValidation.idError && (
+                      <div style={{ color: "#ef4444", fontSize: "0.82rem", marginTop: "6px", display: "flex", alignItems: "center", gap: "6px", fontWeight: 500 }}>
+                        <span>⚠️</span> {duplicateValidation.idError}
+                      </div>
+                    )}
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">
+                    <label className="form-label" style={duplicateValidation.sewaError ? { color: "#f87171" } : undefined}>
                       {language === "si" ? "සේවා අංකය (Sewa Ankaya) *" : "Sewa Ankaya (Service ID) *"}
                     </label>
                     <input
@@ -2859,8 +3361,17 @@ export default function WelfareApp() {
                       placeholder={language === "si" ? "උදා: SO-4089 / 12345" : "e.g. SO-4089 / 12345"}
                       required
                       value={memberForm.sewaAnkaya}
-                      onChange={(e) => setMemberForm({ ...memberForm, sewaAnkaya: e.target.value })}
+                      style={duplicateValidation.sewaError ? { borderColor: "#ef4444", boxShadow: "0 0 0 3px rgba(239, 68, 68, 0.25)", background: "rgba(239, 68, 68, 0.05)" } : undefined}
+                      onChange={(e) => {
+                        setMemberForm({ ...memberForm, sewaAnkaya: e.target.value });
+                        if (memberFormError) setMemberFormError(null);
+                      }}
                     />
+                    {duplicateValidation.sewaError && (
+                      <div style={{ color: "#ef4444", fontSize: "0.82rem", marginTop: "6px", display: "flex", alignItems: "center", gap: "6px", fontWeight: 500 }}>
+                        <span>⚠️</span> {duplicateValidation.sewaError}
+                      </div>
+                    )}
                   </div>
 
                   <div className="form-group">
@@ -2890,14 +3401,25 @@ export default function WelfareApp() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">{language === "si" ? "විද්‍යුත් තැපැල් ලිපිනය (විකල්පයි)" : "Email Address (Optional)"}</label>
+                    <label className="form-label" style={duplicateValidation.emailError ? { color: "#f87171" } : undefined}>
+                      {language === "si" ? "විද්‍යුත් තැපැල් ලිපිනය (විකල්පයි)" : "Email Address (Optional)"}
+                    </label>
                     <input
                       type="email"
                       className="form-input"
                       placeholder="nimal.perera@org.internal"
                       value={memberForm.email}
-                      onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
+                      style={duplicateValidation.emailError ? { borderColor: "#ef4444", boxShadow: "0 0 0 3px rgba(239, 68, 68, 0.25)", background: "rgba(239, 68, 68, 0.05)" } : undefined}
+                      onChange={(e) => {
+                        setMemberForm({ ...memberForm, email: e.target.value });
+                        if (memberFormError) setMemberFormError(null);
+                      }}
                     />
+                    {duplicateValidation.emailError && (
+                      <div style={{ color: "#ef4444", fontSize: "0.82rem", marginTop: "6px", display: "flex", alignItems: "center", gap: "6px", fontWeight: 500 }}>
+                        <span>⚠️</span> {duplicateValidation.emailError}
+                      </div>
+                    )}
                   </div>
 
                   <div className="form-group">
@@ -2939,11 +3461,32 @@ export default function WelfareApp() {
                 </div>
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowAddMemberModal(false)}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setMemberFormError(null);
+                    setShowAddMemberModal(false);
+                  }}
+                >
                   {t(language, "modalCancel")}
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  {language === "si" ? "සුරකින්න සහ ලියාපදිංචි කරන්න" : "Save & Register"}
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={duplicateValidation.hasDuplicate ? { opacity: 0.65, cursor: "not-allowed", background: "var(--bg-card, #334155)" } : {}}
+                  disabled={memberSubmitting || duplicateValidation.hasDuplicate}
+                  title={duplicateValidation.hasDuplicate ? (language === "si" ? "ද්විත්ව තොරතුරු පවතින බැවින් ලියාපදිංචි කළ නොහැක" : "Resolve duplicate entries to enable registration") : undefined}
+                >
+                  {memberSubmitting ? (
+                    <span>⏳ {language === "si" ? "ලියාපදිංචි වෙමින් පවතී..." : "Registering..."}</span>
+                  ) : duplicateValidation.hasDuplicate ? (
+                    <>
+                      <span>⛔</span> {language === "si" ? "ද්විත්ව තොරතුරු (අවහිරයි)" : "Duplicates Detected"}
+                    </>
+                  ) : (
+                    language === "si" ? "සුරකින්න සහ ලියාපදිංචි කරන්න" : "Save & Register"
+                  )}
                 </button>
               </div>
             </form>
@@ -2974,25 +3517,41 @@ export default function WelfareApp() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">{language === "si" ? "හැඳුනුම්පත් අංකය (ID Number)" : "ID Number (NIC)"}</label>
+                    <label className="form-label" style={duplicateValidation.idError ? { color: "#f87171" } : undefined}>
+                      {language === "si" ? "හැඳුනුම්පත් අංකය (ID Number)" : "ID Number (NIC)"}
+                    </label>
                     <input
                       type="text"
                       className="form-input"
                       placeholder="e.g. 199012345678 / 901234567V"
                       value={memberForm.idNumber}
+                      style={duplicateValidation.idError ? { borderColor: "#ef4444", boxShadow: "0 0 0 3px rgba(239, 68, 68, 0.25)", background: "rgba(239, 68, 68, 0.05)" } : undefined}
                       onChange={(e) => setMemberForm({ ...memberForm, idNumber: e.target.value })}
                     />
+                    {duplicateValidation.idError && (
+                      <div style={{ color: "#ef4444", fontSize: "0.82rem", marginTop: "6px", display: "flex", alignItems: "center", gap: "6px", fontWeight: 500 }}>
+                        <span>⚠️</span> {duplicateValidation.idError}
+                      </div>
+                    )}
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">{language === "si" ? "සේවා අංකය (Sewa Ankaya)" : "Sewa Ankaya (Service ID)"}</label>
+                    <label className="form-label" style={duplicateValidation.sewaError ? { color: "#f87171" } : undefined}>
+                      {language === "si" ? "සේවා අංකය (Sewa Ankaya)" : "Sewa Ankaya (Service ID)"}
+                    </label>
                     <input
                       type="text"
                       className="form-input"
                       placeholder="e.g. SO-4089 / 12345"
                       value={memberForm.sewaAnkaya}
+                      style={duplicateValidation.sewaError ? { borderColor: "#ef4444", boxShadow: "0 0 0 3px rgba(239, 68, 68, 0.25)", background: "rgba(239, 68, 68, 0.05)" } : undefined}
                       onChange={(e) => setMemberForm({ ...memberForm, sewaAnkaya: e.target.value })}
                     />
+                    {duplicateValidation.sewaError && (
+                      <div style={{ color: "#ef4444", fontSize: "0.82rem", marginTop: "6px", display: "flex", alignItems: "center", gap: "6px", fontWeight: 500 }}>
+                        <span>⚠️</span> {duplicateValidation.sewaError}
+                      </div>
+                    )}
                   </div>
 
                   <div className="form-group">
@@ -3017,13 +3576,21 @@ export default function WelfareApp() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">{language === "si" ? "විද්‍යුත් තැපැල් ලිපිනය (විකල්පයි)" : "Email (Optional)"}</label>
+                    <label className="form-label" style={duplicateValidation.emailError ? { color: "#f87171" } : undefined}>
+                      {language === "si" ? "විද්‍යුත් තැපැල් ලිපිනය (විකල්පයි)" : "Email (Optional)"}
+                    </label>
                     <input
                       type="email"
                       className="form-input"
                       value={memberForm.email}
+                      style={duplicateValidation.emailError ? { borderColor: "#ef4444", boxShadow: "0 0 0 3px rgba(239, 68, 68, 0.25)", background: "rgba(239, 68, 68, 0.05)" } : undefined}
                       onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
                     />
+                    {duplicateValidation.emailError && (
+                      <div style={{ color: "#ef4444", fontSize: "0.82rem", marginTop: "6px", display: "flex", alignItems: "center", gap: "6px", fontWeight: 500 }}>
+                        <span>⚠️</span> {duplicateValidation.emailError}
+                      </div>
+                    )}
                   </div>
 
                   <div className="form-group">
@@ -3060,8 +3627,20 @@ export default function WelfareApp() {
                 <button type="button" className="btn btn-secondary" onClick={() => setShowEditMemberModal(false)}>
                   {t(language, "modalCancel")}
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  {t(language, "modalSave")}
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={duplicateValidation.hasDuplicate ? { opacity: 0.65, cursor: "not-allowed", background: "var(--bg-card, #334155)" } : {}}
+                  disabled={duplicateValidation.hasDuplicate}
+                  title={duplicateValidation.hasDuplicate ? (language === "si" ? "ද්විත්ව තොරතුරු පවතින බැවින් සුරැකිය නොහැක" : "Resolve duplicate entries to save") : undefined}
+                >
+                  {duplicateValidation.hasDuplicate ? (
+                    <>
+                      <span>⛔</span> {language === "si" ? "ද්විත්ව තොරතුරු (අවහිරයි)" : "Duplicates Detected"}
+                    </>
+                  ) : (
+                    t(language, "modalSave")
+                  )}
                 </button>
               </div>
             </form>
@@ -3729,6 +4308,264 @@ export default function WelfareApp() {
                   disabled={financeSubmitting}
                 >
                   {financeSubmitting ? "..." : (language === "si" ? "වියදම සටහන් කරන්න" : "Disburse & Save Expense")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 8. Balance Management Modal */}
+      {showBalanceModal && (
+        <div className="modal-backdrop" id="modal-balance-management" onClick={() => setShowBalanceModal(false)}>
+          <div className="modal-dialog" style={{ maxWidth: "620px" }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h3 className="modal-title" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span>⚖️</span> {language === "si" ? "ගිණුම් ශේෂය කළමනාකරණය" : "Manage Account Balance"}
+                </h3>
+                <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                  {language === "si"
+                    ? "සුබසාධක අරමුදලේ වත්මන් මුදල් ශේෂය හෝ ආරම්භක සංචිතය යාවත්කාලීන කරන්න"
+                    : "Audit and update the welfare fund's current balance or initial capital reserve"}
+                </p>
+              </div>
+              <button className="modal-close-btn" onClick={() => setShowBalanceModal(false)}>✕</button>
+            </div>
+
+            {/* Current Metrics Overview Strip */}
+            <div style={{
+              background: "rgba(15, 23, 42, 0.45)",
+              borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+              padding: "14px 20px",
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "12px"
+            }}>
+              <div style={{
+                background: "rgba(16, 185, 129, 0.08)",
+                border: "1px solid rgba(16, 185, 129, 0.2)",
+                borderRadius: "10px",
+                padding: "10px 14px"
+              }}>
+                <div style={{ fontSize: "0.74rem", color: "#6ee7b7", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>
+                  {language === "si" ? "වත්මන් මුදල් සංචිතය (Cash Pool)" : "Current Cash Pool"}
+                </div>
+                <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ecfdf5", fontFamily: "var(--font-mono)", marginTop: "2px" }}>
+                  {curr}{fund ? fund.currentCashPool.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."}
+                </div>
+              </div>
+
+              <div style={{
+                background: "rgba(59, 130, 246, 0.08)",
+                border: "1px solid rgba(59, 130, 246, 0.2)",
+                borderRadius: "10px",
+                padding: "10px 14px"
+              }}>
+                <div style={{ fontSize: "0.74rem", color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>
+                  {language === "si" ? "මූලික ආරම්භක සංචිතය (Base Reserve)" : "Base Opening Reserve"}
+                </div>
+                <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#eff6ff", fontFamily: "var(--font-mono)", marginTop: "2px" }}>
+                  {curr}{fund ? fund.initialReserve.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."}
+                </div>
+              </div>
+            </div>
+
+            <form onSubmit={handleUpdateBalance}>
+              <div className="modal-body" style={{ padding: "20px" }}>
+                {/* Mode Selector Tabs */}
+                <div style={{ marginBottom: "18px" }}>
+                  <label className="form-label" style={{ marginBottom: "8px" }}>
+                    {language === "si" ? "ශේෂ යාවත්කාලීන කිරීමේ ක්‍රමය තෝරන්න" : "Balance Adjustment Method"}
+                  </label>
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "8px",
+                    background: "rgba(0, 0, 0, 0.25)",
+                    padding: "4px",
+                    borderRadius: "10px",
+                    border: "1px solid rgba(255, 255, 255, 0.06)"
+                  }}>
+                    <button
+                      type="button"
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: "8px",
+                        border: "none",
+                        fontSize: "0.85rem",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        transition: "all 0.2s ease",
+                        background: balanceForm.mode === "current" ? "var(--primary, #059669)" : "transparent",
+                        color: balanceForm.mode === "current" ? "#ffffff" : "var(--text-muted)",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: "2px"
+                      }}
+                      onClick={() => setBalanceForm({
+                        ...balanceForm,
+                        mode: "current",
+                        amount: fund ? fund.currentCashPool : 0
+                      })}
+                    >
+                      <span>🎯 {language === "si" ? "වත්මන් මුදල් ශේෂය" : "Target Current Balance"}</span>
+                      <span style={{ fontSize: "0.7rem", opacity: 0.85, fontWeight: 400 }}>
+                        {language === "si" ? "සෘජුවම ශේෂය සැකසීම" : "Direct Cash Pool Value"}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: "8px",
+                        border: "none",
+                        fontSize: "0.85rem",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        transition: "all 0.2s ease",
+                        background: balanceForm.mode === "reserve" ? "var(--primary, #059669)" : "transparent",
+                        color: balanceForm.mode === "reserve" ? "#ffffff" : "var(--text-muted)",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: "2px"
+                      }}
+                      onClick={() => setBalanceForm({
+                        ...balanceForm,
+                        mode: "reserve",
+                        amount: fund ? fund.initialReserve : 45000,
+                        recordTransaction: false
+                      })}
+                    >
+                      <span>🏛️ {language === "si" ? "ආරම්භක මූලික සංචිතය" : "Base Opening Reserve"}</span>
+                      <span style={{ fontSize: "0.7rem", opacity: 0.85, fontWeight: 400 }}>
+                        {language === "si" ? "පදනම් ප්‍රාග්ධනය" : "Baseline Reserve Capital"}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="form-grid">
+                  {/* Amount Input */}
+                  <div className="form-group full">
+                    <label className="form-label">
+                      {balanceForm.mode === "current"
+                        ? (language === "si" ? `නව වත්මන් මුදල් ශේෂය (${curr}) *` : `Target Current Cash Pool Balance (${curr}) *`)
+                        : (language === "si" ? `නව ආරම්භක සංචිත මුදල (${curr}) *` : `New Base Capital Reserve (${curr}) *`)}
+                    </label>
+                    <div style={{ position: "relative" }}>
+                      <span style={{
+                        position: "absolute",
+                        left: "14px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        color: "var(--text-muted)",
+                        fontWeight: 600,
+                        fontFamily: "var(--font-mono)"
+                      }}>
+                        {curr}
+                      </span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="form-input"
+                        required
+                        style={{ paddingLeft: "42px", fontSize: "1.1rem", fontFamily: "var(--font-mono)", fontWeight: 700 }}
+                        placeholder="0.00"
+                        value={balanceForm.amount}
+                        onChange={(e) => setBalanceForm({ ...balanceForm, amount: e.target.value })}
+                      />
+                    </div>
+                    <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "4px" }}>
+                      {balanceForm.mode === "current"
+                        ? (language === "si"
+                            ? "සංගමයේ බැංකු ගිණුමේ හෝ සේප්පුවේ ඇති සැබෑ වත්මන් මුදල් ශේෂය මෙහි ඇතුළත් කරන්න."
+                            : "Specify the exact balance presently available in the bank account or association safe.")
+                        : (language === "si"
+                            ? "සුබසාධක අරමුදල ආරම්භ කළ අවස්ථාවේ පැවති ආරම්භක සංචිතය මෙයින් සකස් වේ."
+                            : "Adjusts the baseline opening capital from which all cumulative income and expenses are computed.")}
+                    </span>
+                  </div>
+
+                  {/* Mode A Only: Transaction Log Checkbox & Diff Preview */}
+                  {balanceForm.mode === "current" && (
+                    <div className="form-group full">
+                      {fund && !isNaN(Number(balanceForm.amount)) && (
+                        <div style={{
+                          padding: "10px 14px",
+                          borderRadius: "8px",
+                          marginBottom: "12px",
+                          fontSize: "0.83rem",
+                          background: (Number(balanceForm.amount) - fund.currentCashPool) >= 0 ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.1)",
+                          border: `1px solid ${(Number(balanceForm.amount) - fund.currentCashPool) >= 0 ? "rgba(16, 185, 129, 0.25)" : "rgba(239, 68, 68, 0.25)"}`,
+                          color: (Number(balanceForm.amount) - fund.currentCashPool) >= 0 ? "#6ee7b7" : "#fca5a5",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center"
+                        }}>
+                          <span>{language === "si" ? "ශේෂ වෙනස (Difference):" : "Calculated Adjustment Difference:"}</span>
+                          <strong style={{ fontFamily: "var(--font-mono)", fontSize: "0.95rem" }}>
+                            {(Number(balanceForm.amount) - fund.currentCashPool) >= 0 ? "+" : ""}{curr}{(Number(balanceForm.amount) - fund.currentCashPool).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </strong>
+                        </div>
+                      )}
+
+                      <div className="toggle-group" style={{ padding: "12px 14px", background: "rgba(0,0,0,0.2)", borderRadius: "8px" }}>
+                        <div className="toggle-label">
+                          <strong style={{ fontSize: "0.88rem" }}>
+                            {language === "si" ? "මූල්‍ය ලෙජරයේ ගැලපුම් වාර්තාවක් සටහන් කරන්න" : "Log audit transaction in ledger"}
+                          </strong>
+                          <span style={{ fontSize: "0.76rem" }}>
+                            {language === "si"
+                              ? "වෙනස මුදල් ආදායමක් හෝ වියදමක් ලෙස මූල්‍ය ලෙජරයට (Finance Transactions) ස්වයංක්‍රීයව එක් වේ."
+                              : "Automatically logs the variance as an audit income or expense voucher in the finance ledger."}
+                          </span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          style={{ width: "20px", height: "20px", cursor: "pointer" }}
+                          checked={balanceForm.recordTransaction}
+                          onChange={(e) => setBalanceForm({ ...balanceForm, recordTransaction: e.target.checked })}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Notes / Reason */}
+                  <div className="form-group full">
+                    <label className="form-label">
+                      {language === "si" ? "විගණන සටහන් සහ හේතුව (විකල්පයි)" : "Audit Memo & Reference (Optional)"}
+                    </label>
+                    <textarea
+                      className="form-textarea"
+                      rows={2}
+                      placeholder={language === "si" ? "උදා: 2026 සැප්තැම්බර් බැංකු ප්‍රකාශන ගැලපීම, විධායක කමිටු තීරණ අංක 12..." : "e.g. Bank statement reconciliation as of Sept 2026, committee resolution #12..."}
+                      value={balanceForm.notes}
+                      onChange={(e) => setBalanceForm({ ...balanceForm, notes: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowBalanceModal(false)}>
+                  {t(language, "modalCancel")}
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ minWidth: "160px", background: "linear-gradient(135deg, #059669 0%, #10b981 100%)" }}
+                  disabled={balanceSubmitting}
+                >
+                  {balanceSubmitting ? (
+                    <span>⏳ {language === "si" ? "යාවත්කාලීන වෙමින්..." : "Updating..."}</span>
+                  ) : (
+                    <span>✓ {language === "si" ? "ශේෂය තහවුරු කරන්න" : "Save Balance Update"}</span>
+                  )}
                 </button>
               </div>
             </form>

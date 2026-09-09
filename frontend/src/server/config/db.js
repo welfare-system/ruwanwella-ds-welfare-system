@@ -26,7 +26,7 @@ function getPool() {
       ssl: isNeon ? { rejectUnauthorized: false } : false,
       max: 10, // Serverless-friendly connection limit
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000
+      connectionTimeoutMillis: 30000
     });
 
     pool.on('connect', () => {

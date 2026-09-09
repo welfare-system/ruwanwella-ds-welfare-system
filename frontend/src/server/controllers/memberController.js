@@ -62,6 +62,16 @@ exports.getMemberById = async (req, res) => {
   }
 };
 
+exports.validateMemberDuplicates = async (req, res) => {
+  try {
+    const { idNumber, sewaAnkaya, email, excludeId } = req.body;
+    const check = await store.checkMemberDuplicate({ idNumber, sewaAnkaya, email, excludeId });
+    res.status(200).json({ success: true, ...check });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
 exports.createMember = async (req, res) => {
   try {
     const { name, email, phone, department, role, monthlyContribution, notes, thanthura, idNumber, sewaAnkaya } = req.body;
@@ -85,6 +95,22 @@ exports.createMember = async (req, res) => {
       metaNotes.length ? `[${metaNotes.join(' | ')}]` : '',
       notes ? notes.trim() : ''
     ].filter(Boolean).join(' ');
+
+    // Duplicate validation: Check ID Number (NIC), Sewa Ankaya (Service ID), and Email Address
+    const dupCheck = await store.checkMemberDuplicate({
+      idNumber: resolvedIdNumber,
+      sewaAnkaya: resolvedSewaAnkaya,
+      email: cleanEmail
+    });
+
+    if (dupCheck.hasDuplicate) {
+      return res.status(400).json({
+        success: false,
+        field: dupCheck.field,
+        error: dupCheck.error,
+        conflictingMember: dupCheck.conflictingMember
+      });
+    }
 
     // Retry loop with sequence check to guarantee zero duplicate key constraint violations
     let attempts = 0;
@@ -181,6 +207,34 @@ exports.updateMember = async (req, res) => {
     // Prevent overriding system IDs
     delete updates.id;
     delete updates.memberId;
+
+    const dupCheck = await store.checkMemberDuplicate({
+      idNumber: updates.idNumber !== undefined ? updates.idNumber : existing.idNumber,
+      sewaAnkaya: updates.sewaAnkaya !== undefined ? updates.sewaAnkaya : existing.sewaAnkaya,
+      email: updates.email !== undefined ? updates.email : existing.email,
+      excludeId: existing.id
+    });
+
+    if (dupCheck.hasDuplicate) {
+      return res.status(400).json({
+        success: false,
+        field: dupCheck.field,
+        error: dupCheck.error,
+        conflictingMember: dupCheck.conflictingMember
+      });
+    }
+
+    if (updates.idNumber !== undefined || updates.sewaAnkaya !== undefined) {
+      const newIdNum = updates.idNumber !== undefined ? updates.idNumber.trim() : (existing.idNumber || '');
+      const newSewa = updates.sewaAnkaya !== undefined ? updates.sewaAnkaya.trim() : (existing.sewaAnkaya || '');
+      let baseNotes = (updates.notes !== undefined ? updates.notes : (existing.notes || '')).replace(/\[NIC\/ID:[^\]]+\]\s*/g, '').trim();
+      const meta = [];
+      if (newIdNum) meta.push(`NIC/ID: ${newIdNum}`);
+      if (newSewa) meta.push(`Service No: ${newSewa}`);
+      updates.notes = [meta.length ? `[${meta.join(' | ')}]` : '', baseNotes].filter(Boolean).join(' ');
+      updates.idNumber = newIdNum;
+      updates.sewaAnkaya = newSewa;
+    }
 
     if (updates.thanthura) {
       updates.department = updates.thanthura.trim();

@@ -37,9 +37,11 @@ router.put('/settings/password', authenticateToken, settingsController.changePas
 
 // ── Fund Analytics ──────────────────────────────────────────────────────────
 router.get('/fund/summary', fundController.getFundSummary);
+router.put('/fund/balance', authenticateToken, requireRole('admin'), fundController.updateFundBalance);
 
 // ── Members API ─────────────────────────────────────────────────────────────
 router.get('/members', memberController.getAllMembers);
+router.post('/members/validate-duplicates', optionalAuth, memberController.validateMemberDuplicates);
 router.get('/members/:id', memberController.getMemberById);
 router.post('/members', optionalAuth, memberController.createMember);
 router.put('/members/:id', authenticateToken, requireRole('admin'), memberController.updateMember);

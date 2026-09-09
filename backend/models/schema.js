@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS system_settings (
   max_loan_limit NUMERIC(12,2) NOT NULL DEFAULT 500000,
   default_interest_rate NUMERIC(5,2) NOT NULL DEFAULT 4.5,
   auto_payroll_deduction BOOLEAN NOT NULL DEFAULT TRUE,
+  initial_reserve NUMERIC(12,2) NOT NULL DEFAULT 45000,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -30,6 +31,9 @@ CREATE TABLE IF NOT EXISTS members (
   email VARCHAR(255) UNIQUE,
   phone VARCHAR(50) NOT NULL,
   department VARCHAR(100) NOT NULL,
+  thanthura VARCHAR(100),
+  id_number VARCHAR(100),
+  sewa_ankaya VARCHAR(100),
   role VARCHAR(50) NOT NULL DEFAULT 'Member',
   status VARCHAR(20) NOT NULL DEFAULT 'Active',
   monthly_contribution NUMERIC(12,2) NOT NULL DEFAULT 100,
@@ -125,6 +129,24 @@ async function initDatabase() {
     try {
       await db.query('ALTER TABLE members ALTER COLUMN email DROP NOT NULL;');
     } catch (_) {}
+    try {
+      await db.query('ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS initial_reserve NUMERIC(12,2) DEFAULT 45000;');
+    } catch (_) {}
+    try {
+      await db.query('ALTER TABLE members ADD COLUMN IF NOT EXISTS thanthura VARCHAR(100);');
+      await db.query('ALTER TABLE members ADD COLUMN IF NOT EXISTS id_number VARCHAR(100);');
+      await db.query('ALTER TABLE members ADD COLUMN IF NOT EXISTS sewa_ankaya VARCHAR(100);');
+      await db.query(`
+        UPDATE members 
+        SET id_number = substring(notes from 'NIC/ID:\\s*([^|\\]]+)')
+        WHERE (id_number IS NULL OR id_number = '') AND notes ~ 'NIC/ID:';
+      `);
+      await db.query(`
+        UPDATE members 
+        SET sewa_ankaya = substring(notes from 'Service No:\\s*([^|\\]]+)')
+        WHERE (sewa_ankaya IS NULL OR sewa_ankaya = '') AND notes ~ 'Service No:';
+      `);
+    } catch (_) {}
     console.log('✅ PostgreSQL tables verified / created.');
 
     // 1. Seed System Settings
@@ -133,8 +155,8 @@ async function initDatabase() {
       await db.query(`
         INSERT INTO system_settings (
           id, organization_name, currency, currency_symbol, 
-          default_contribution_rate, max_loan_limit, default_interest_rate, auto_payroll_deduction
-        ) VALUES (1, 'Staff Welfare Association', 'LKR', 'Rs.', 2500, 500000, 4.5, TRUE)
+          default_contribution_rate, max_loan_limit, default_interest_rate, auto_payroll_deduction, initial_reserve
+        ) VALUES (1, 'Staff Welfare Association', 'LKR', 'Rs.', 2500, 500000, 4.5, TRUE, 45000)
       `);
       console.log('🌱 Seeded default system settings.');
     }

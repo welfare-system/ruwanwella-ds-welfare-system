@@ -16,14 +16,15 @@ let memSettings = {
   defaultContributionRate: 2500,
   maxLoanLimit: 500000,
   defaultInterestRate: 4.5,
-  autoPayrollDeduction: true
+  autoPayrollDeduction: true,
+  initialReserve: 45000
 };
 let memMembers = [
-  { id: "mem_1", memberId: "WLF-1001", name: "Dr. Evelyn Vance", email: "evelyn.vance@org.internal", phone: "+1 (555) 234-5678", department: "Medical Operations", role: "Chairperson", status: "Active", monthlyContribution: 150, totalContributed: 3600, joinDate: "2024-01-15", notes: "Founding member of the welfare committee." },
-  { id: "mem_2", memberId: "WLF-1002", name: "Marcus Aurelius Thorne", email: "marcus.thorne@org.internal", phone: "+1 (555) 345-6789", department: "Logistics & Transport", role: "Member", status: "Active", monthlyContribution: 100, totalContributed: 2400, joinDate: "2024-03-10", notes: "Consistent monthly payroll deductions." },
-  { id: "mem_3", memberId: "WLF-1003", name: "Sophia Chen", email: "sophia.chen@org.internal", phone: "+1 (555) 456-7890", department: "Information Technology", role: "Treasurer", status: "Active", monthlyContribution: 200, totalContributed: 4800, joinDate: "2024-02-01", notes: "Oversees fund auditing and disbursements." },
-  { id: "mem_4", memberId: "WLF-1004", name: "David K. O'Connor", email: "david.oconnor@org.internal", phone: "+1 (555) 567-8901", department: "Human Resources", role: "Member", status: "Active", monthlyContribution: 120, totalContributed: 2880, joinDate: "2024-05-20", notes: "Active contributor with one completed loan." },
-  { id: "mem_5", memberId: "WLF-1005", name: "Amara Ndiaye", email: "amara.ndiaye@org.internal", phone: "+1 (555) 678-9012", department: "Field Research", role: "Member", status: "Active", monthlyContribution: 100, totalContributed: 1900, joinDate: "2024-08-14", notes: "Enrolled via new hire welfare orientation." }
+  { id: "mem_1", memberId: "WLF-1001", name: "Dr. Evelyn Vance", email: "evelyn.vance@org.internal", phone: "+1 (555) 234-5678", department: "Medical Operations", role: "Chairperson", status: "Active", monthlyContribution: 150, totalContributed: 3600, joinDate: "2024-01-15", idNumber: "198512345678", sewaAnkaya: "SEW-1001", notes: "[NIC/ID: 198512345678 | Service No: SEW-1001] Founding member of the welfare committee." },
+  { id: "mem_2", memberId: "WLF-1002", name: "Marcus Aurelius Thorne", email: "marcus.thorne@org.internal", phone: "+1 (555) 345-6789", department: "Logistics & Transport", role: "Member", status: "Active", monthlyContribution: 100, totalContributed: 2400, joinDate: "2024-03-10", idNumber: "198298765432", sewaAnkaya: "SEW-1002", notes: "[NIC/ID: 198298765432 | Service No: SEW-1002] Consistent monthly payroll deductions." },
+  { id: "mem_3", memberId: "WLF-1003", name: "Sophia Chen", email: "sophia.chen@org.internal", phone: "+1 (555) 456-7890", department: "Information Technology", role: "Treasurer", status: "Active", monthlyContribution: 200, totalContributed: 4800, joinDate: "2024-02-01", idNumber: "199045678901", sewaAnkaya: "SEW-1003", notes: "[NIC/ID: 199045678901 | Service No: SEW-1003] Oversees fund auditing and disbursements." },
+  { id: "mem_4", memberId: "WLF-1004", name: "David K. O'Connor", email: "david.oconnor@org.internal", phone: "+1 (555) 567-8901", department: "Human Resources", role: "Member", status: "Active", monthlyContribution: 120, totalContributed: 2880, joinDate: "2024-05-20", idNumber: "198856789012", sewaAnkaya: "SEW-1004", notes: "[NIC/ID: 198856789012 | Service No: SEW-1004] Active contributor with one completed loan." },
+  { id: "mem_5", memberId: "WLF-1005", name: "Amara Ndiaye", email: "amara.ndiaye@org.internal", phone: "+1 (555) 678-9012", department: "Field Research", role: "Member", status: "Active", monthlyContribution: 100, totalContributed: 1900, joinDate: "2024-08-14", idNumber: "199267890123", sewaAnkaya: "SEW-1005", notes: "[NIC/ID: 199267890123 | Service No: SEW-1005] Enrolled via new hire welfare orientation." }
 ];
 let memUsers = [
   { id: "usr_admin", email: "admin@welfare.org", passwordHash: bcrypt.hashSync("AdminPassword123!", 10), name: "System Administrator", role: "admin", memberId: null, department: "Executive Committee", phone: "+1 (555) 000-1122" },
@@ -65,7 +66,8 @@ function mapSettings(row) {
     defaultContributionRate: Number(row.default_contribution_rate) || 2500,
     maxLoanLimit: Number(row.max_loan_limit) || 500000,
     defaultInterestRate: Number(row.default_interest_rate) || 4.5,
-    autoPayrollDeduction: Boolean(row.auto_payroll_deduction)
+    autoPayrollDeduction: Boolean(row.auto_payroll_deduction),
+    initialReserve: Number(row.initial_reserve !== undefined && row.initial_reserve !== null ? row.initial_reserve : 45000)
   };
 }
 
@@ -214,6 +216,7 @@ module.exports = {
           max_loan_limit = $5,
           default_interest_rate = $6,
           auto_payroll_deduction = $7,
+          initial_reserve = $8,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = 1
     `, [
@@ -223,7 +226,8 @@ module.exports = {
       merged.defaultContributionRate,
       merged.maxLoanLimit,
       merged.defaultInterestRate,
-      merged.autoPayrollDeduction
+      merged.autoPayrollDeduction,
+      merged.initialReserve !== undefined ? Number(merged.initialReserve) : 45000
     ]);
 
     return merged;
@@ -418,12 +422,16 @@ module.exports = {
     const cleanId = member.id || `mem_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     const cleanMemberId = member.memberId || (await module.exports.getNextMemberId());
     const cleanEmail = member.email && typeof member.email === 'string' && member.email.trim() ? member.email.trim().toLowerCase() : null;
+    const cleanIdNumber = member.idNumber ? member.idNumber.trim() : '';
+    const cleanSewaAnkaya = member.sewaAnkaya ? member.sewaAnkaya.trim() : '';
 
     const toInsert = {
       ...member,
       id: cleanId,
       memberId: cleanMemberId,
-      email: cleanEmail
+      email: cleanEmail,
+      idNumber: cleanIdNumber,
+      sewaAnkaya: cleanSewaAnkaya
     };
 
     if (!db.isConfigured()) {
@@ -432,9 +440,9 @@ module.exports = {
     }
     await db.query(`
       INSERT INTO members (
-        id, member_id, name, email, phone, department, role, status, 
+        id, member_id, name, email, phone, department, thanthura, id_number, sewa_ankaya, role, status, 
         monthly_contribution, total_contributed, join_date, notes
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
     `, [
       toInsert.id,
       toInsert.memberId,
@@ -442,6 +450,9 @@ module.exports = {
       toInsert.email,
       toInsert.phone,
       toInsert.thanthura || toInsert.department || 'General Staff',
+      toInsert.thanthura || toInsert.department || 'General Staff',
+      toInsert.idNumber || '',
+      toInsert.sewaAnkaya || '',
       toInsert.role || 'Member',
       toInsert.status || 'Active',
       toInsert.monthlyContribution || 100,
@@ -467,6 +478,9 @@ module.exports = {
     const email = updates.email !== undefined ? (updates.email && updates.email.trim ? updates.email.trim().toLowerCase() : null) : existing.email;
     const phone = updates.phone !== undefined ? updates.phone : existing.phone;
     const department = updates.department !== undefined ? updates.department : existing.department;
+    const thanthura = updates.thanthura !== undefined ? updates.thanthura : (existing.thanthura || existing.department);
+    const idNumber = updates.idNumber !== undefined ? updates.idNumber.trim() : (existing.idNumber || '');
+    const sewaAnkaya = updates.sewaAnkaya !== undefined ? updates.sewaAnkaya.trim() : (existing.sewaAnkaya || '');
     const role = updates.role !== undefined ? updates.role : existing.role;
     const status = updates.status !== undefined ? updates.status : existing.status;
     const monthlyContribution = updates.monthlyContribution !== undefined ? Number(updates.monthlyContribution) : existing.monthlyContribution;
@@ -475,14 +489,55 @@ module.exports = {
 
     const res = await db.query(`
       UPDATE members
-      SET name = $1, email = $2, phone = $3, department = $4, role = $5,
-          status = $6, monthly_contribution = $7, total_contributed = $8,
-          notes = $9, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $10 OR member_id = $10
+      SET name = $1, email = $2, phone = $3, department = $4, thanthura = $5,
+          id_number = $6, sewa_ankaya = $7, role = $8,
+          status = $9, monthly_contribution = $10, total_contributed = $11,
+          notes = $12, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $13 OR member_id = $13
       RETURNING *
-    `, [name, email, phone, department, role, status, monthlyContribution, totalContributed, notes, id]);
+    `, [name, email, phone, department, thanthura, idNumber, sewaAnkaya, role, status, monthlyContribution, totalContributed, notes, id]);
 
     return res.rows.length > 0 ? mapMember(res.rows[0]) : null;
+  },
+
+  checkMemberDuplicate: async ({ idNumber, sewaAnkaya, email, excludeId }) => {
+    const allMembers = await module.exports.getMembers();
+    const cleanId = idNumber ? String(idNumber).trim().toUpperCase() : '';
+    const cleanSewa = sewaAnkaya ? String(sewaAnkaya).trim().toUpperCase() : '';
+    const cleanEmail = email && typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : '';
+
+    for (const m of allMembers) {
+      if (excludeId && (m.id === excludeId || m.memberId === excludeId)) continue;
+
+      if (cleanId && m.idNumber && m.idNumber.trim().toUpperCase() === cleanId) {
+        return {
+          hasDuplicate: true,
+          field: 'idNumber',
+          error: `A member with ID Number (NIC) "${idNumber.trim()}" already exists in system records (${m.name} - ${m.memberId}). Registration blocked to prevent duplicate entries.`,
+          conflictingMember: { name: m.name, memberId: m.memberId, idNumber: m.idNumber }
+        };
+      }
+
+      if (cleanSewa && m.sewaAnkaya && m.sewaAnkaya.trim().toUpperCase() === cleanSewa) {
+        return {
+          hasDuplicate: true,
+          field: 'sewaAnkaya',
+          error: `A member with Sewa Ankaya (Service ID) "${sewaAnkaya.trim()}" already exists in system records (${m.name} - ${m.memberId}). Registration blocked to prevent duplicate entries.`,
+          conflictingMember: { name: m.name, memberId: m.memberId, sewaAnkaya: m.sewaAnkaya }
+        };
+      }
+
+      if (cleanEmail && m.email && m.email.trim().toLowerCase() === cleanEmail) {
+        return {
+          hasDuplicate: true,
+          field: 'email',
+          error: `Email address "${cleanEmail}" already exists in system records (${m.name} - ${m.memberId}). Registration blocked to prevent duplicate entries.`,
+          conflictingMember: { name: m.name, memberId: m.memberId, email: m.email }
+        };
+      }
+    }
+
+    return { hasDuplicate: false };
   },
 
   deleteMember: async (id) => {
@@ -643,9 +698,13 @@ module.exports = {
   },
 
   addTransaction: async (tx) => {
+    const txToSave = {
+      ...tx,
+      id: tx.id || `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+    };
     if (!db.isConfigured()) {
-      memTransactions.unshift(tx);
-      return tx;
+      memTransactions.unshift(txToSave);
+      return txToSave;
     }
     await db.query(`
       INSERT INTO transactions (
@@ -653,21 +712,21 @@ module.exports = {
         title, description, party_name, payment_method, receipt_or_voucher_ref, recorded_by
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
     `, [
-      tx.id,
-      tx.voucherNo,
-      tx.type,
-      tx.category,
-      tx.categoryName,
-      tx.amount,
-      tx.date || new Date().toISOString().split('T')[0],
-      tx.title,
-      tx.description || '',
-      tx.partyName,
-      tx.paymentMethod || 'Cash',
-      tx.receiptOrVoucherRef || '',
-      tx.recordedBy || 'admin@welfare.org'
+      txToSave.id,
+      txToSave.voucherNo,
+      txToSave.type,
+      txToSave.category,
+      txToSave.categoryName,
+      txToSave.amount,
+      txToSave.date || new Date().toISOString().split('T')[0],
+      txToSave.title,
+      txToSave.description || '',
+      txToSave.partyName,
+      txToSave.paymentMethod || 'Cash',
+      txToSave.receiptOrVoucherRef || '',
+      txToSave.recordedBy || 'admin@welfare.org'
     ]);
-    return tx;
+    return txToSave;
   },
 
   deleteTransaction: async (id) => {
@@ -683,6 +742,9 @@ module.exports = {
 
   // ── Fund Analytics Aggregate ──
   getFundSummary: async () => {
+    const settings = await module.exports.getSystemSettings();
+    const initialReserve = Number(settings.initialReserve !== undefined && settings.initialReserve !== null ? settings.initialReserve : 45000);
+
     if (!db.isConfigured()) {
       const allMembersContributed = memMembers.reduce((sum, m) => sum + (Number(m.totalContributed) || 0), 0);
       const disbursedLoans = memLoans.filter(l => l.status === "Active" || l.status === "Fully Repaid");
@@ -692,11 +754,11 @@ module.exports = {
       const totalOtherIncome = memTransactions.filter(t => t.type === "income").reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
       const totalExpenses = memTransactions.filter(t => t.type === "expense").reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
-      const currentCashPool = INITIAL_RESERVE + allMembersContributed + totalRepaid + totalOtherIncome - totalDisbursed - totalExpenses;
+      const currentCashPool = initialReserve + allMembersContributed + totalRepaid + totalOtherIncome - totalDisbursed - totalExpenses;
 
       return {
         currentCashPool: Math.max(0, currentCashPool),
-        initialReserve: INITIAL_RESERVE,
+        initialReserve,
         totalContributionsCollected: allMembersContributed,
         totalDisbursedLoans: totalDisbursed,
         totalRepaymentsReceived: totalRepaid,
@@ -713,51 +775,36 @@ module.exports = {
       };
     }
 
-    // Execute optimized aggregate queries on PostgreSQL
-    const [memberAgg, loanAgg, txAgg, contCount] = await Promise.all([
-      db.query(`
-        SELECT 
-          COUNT(*) AS total_members,
-          COUNT(*) FILTER (WHERE status = 'Active') AS active_members,
-          COALESCE(SUM(total_contributed), 0) AS total_contributed
-        FROM members
-      `),
-      db.query(`
-        SELECT 
-          COUNT(*) FILTER (WHERE status = 'Active') AS active_loans,
-          COUNT(*) FILTER (WHERE status = 'Pending') AS pending_loans,
-          COALESCE(SUM(principal_amount) FILTER (WHERE status IN ('Active', 'Fully Repaid')), 0) AS total_disbursed,
-          COALESCE(SUM(amount_repaid) FILTER (WHERE status IN ('Active', 'Fully Repaid')), 0) AS total_repaid,
-          COALESCE(SUM(remaining_balance) FILTER (WHERE status = 'Active'), 0) AS total_outstanding
-        FROM loans
-      `),
-      db.query(`
-        SELECT 
-          COUNT(*) AS total_transactions,
-          COALESCE(SUM(amount) FILTER (WHERE type = 'income'), 0) AS total_other_income,
-          COALESCE(SUM(amount) FILTER (WHERE type = 'expense'), 0) AS total_expenses
-        FROM transactions
-      `),
-      db.query(`SELECT COUNT(*) AS count FROM contributions`)
-    ]);
+    // Execute single optimized aggregate query on PostgreSQL
+    const aggRes = await db.query(`
+      SELECT 
+        (SELECT COUNT(*) FROM members) AS total_members,
+        (SELECT COUNT(*) FROM members WHERE status = 'Active') AS active_members,
+        (SELECT COALESCE(SUM(total_contributed), 0) FROM members) AS total_contributed,
+        (SELECT COUNT(*) FROM loans WHERE status = 'Active') AS active_loans,
+        (SELECT COUNT(*) FROM loans WHERE status = 'Pending') AS pending_loans,
+        (SELECT COALESCE(SUM(principal_amount), 0) FROM loans WHERE status IN ('Active', 'Fully Repaid')) AS total_disbursed,
+        (SELECT COALESCE(SUM(amount_repaid), 0) FROM loans WHERE status IN ('Active', 'Fully Repaid')) AS total_repaid,
+        (SELECT COALESCE(SUM(remaining_balance), 0) FROM loans WHERE status = 'Active') AS total_outstanding,
+        (SELECT COUNT(*) FROM transactions) AS total_transactions,
+        (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'income') AS total_other_income,
+        (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'expense') AS total_expenses,
+        (SELECT COUNT(*) FROM contributions) AS cont_count
+    `);
 
-    const m = memberAgg.rows[0];
-    const l = loanAgg.rows[0];
-    const t = txAgg.rows[0];
-    const c = contCount.rows[0];
+    const r = aggRes.rows[0];
+    const allMembersContributed = Number(r.total_contributed) || 0;
+    const totalDisbursed = Number(r.total_disbursed) || 0;
+    const totalRepaid = Number(r.total_repaid) || 0;
+    const totalOutstanding = Number(r.total_outstanding) || 0;
+    const totalOtherIncome = Number(r.total_other_income) || 0;
+    const totalExpenses = Number(r.total_expenses) || 0;
 
-    const allMembersContributed = Number(m.total_contributed) || 0;
-    const totalDisbursed = Number(l.total_disbursed) || 0;
-    const totalRepaid = Number(l.total_repaid) || 0;
-    const totalOutstanding = Number(l.total_outstanding) || 0;
-    const totalOtherIncome = Number(t.total_other_income) || 0;
-    const totalExpenses = Number(t.total_expenses) || 0;
-
-    const currentCashPool = INITIAL_RESERVE + allMembersContributed + totalRepaid + totalOtherIncome - totalDisbursed - totalExpenses;
+    const currentCashPool = initialReserve + allMembersContributed + totalRepaid + totalOtherIncome - totalDisbursed - totalExpenses;
 
     return {
       currentCashPool: Math.max(0, currentCashPool),
-      initialReserve: INITIAL_RESERVE,
+      initialReserve,
       totalContributionsCollected: allMembersContributed,
       totalDisbursedLoans: totalDisbursed,
       totalRepaymentsReceived: totalRepaid,
@@ -765,12 +812,52 @@ module.exports = {
       totalOtherIncome,
       totalExpenses,
       netCashFlow: (allMembersContributed + totalRepaid + totalOtherIncome) - (totalDisbursed + totalExpenses),
-      totalMembers: parseInt(m.total_members, 10) || 0,
-      activeMembers: parseInt(m.active_members, 10) || 0,
-      activeLoansCount: parseInt(l.active_loans, 10) || 0,
-      pendingLoansCount: parseInt(l.pending_loans, 10) || 0,
-      recentContributionsCount: parseInt(c.count, 10) || 0,
-      transactionsCount: parseInt(t.total_transactions, 10) || 0
+      totalMembers: parseInt(r.total_members, 10) || 0,
+      activeMembers: parseInt(r.active_members, 10) || 0,
+      activeLoansCount: parseInt(r.active_loans, 10) || 0,
+      pendingLoansCount: parseInt(r.pending_loans, 10) || 0,
+      recentContributionsCount: parseInt(r.cont_count, 10) || 0,
+      transactionsCount: parseInt(r.total_transactions, 10) || 0
     };
+  },
+
+  updateFundBalance: async ({ initialReserve, currentBalance, notes, recordTransaction, recordedBy }) => {
+    const currentSummary = await module.exports.getFundSummary();
+    let newReserve = currentSummary.initialReserve;
+
+    if (initialReserve !== undefined && !isNaN(Number(initialReserve))) {
+      newReserve = Number(initialReserve);
+    } else if (currentBalance !== undefined && !isNaN(Number(currentBalance))) {
+      const targetCurrent = Number(currentBalance);
+      const netFlow = (currentSummary.totalContributionsCollected + currentSummary.totalRepaymentsReceived + (currentSummary.totalOtherIncome || 0)) -
+                      (currentSummary.totalDisbursedLoans + (currentSummary.totalExpenses || 0));
+
+      if (recordTransaction) {
+        const diff = targetCurrent - currentSummary.currentCashPool;
+        if (Math.abs(diff) >= 0.01) {
+          const isIncome = diff > 0;
+          await module.exports.addTransaction({
+            id: `tx_adj_${Date.now()}`,
+            voucherNo: `${isIncome ? 'INC' : 'EXP'}-ADJ-${Date.now().toString().slice(-6)}`,
+            type: isIncome ? 'income' : 'expense',
+            category: 'balance_adjustment',
+            categoryName: isIncome ? 'ශේෂ ගැලපීම (Balance Adjustment In)' : 'ශේෂ ගැලපීම (Balance Adjustment Out)',
+            amount: Math.abs(diff),
+            date: new Date().toISOString().split('T')[0],
+            title: isIncome ? 'ගිණුම් ශේෂ අතිරේක ගැලපීම' : 'ගිණුම් ශේෂ ඌනතා ගැලපීම',
+            description: notes ? notes.trim() : `Financial balance adjusted to ${targetCurrent}`,
+            partyName: 'Association Fund Treasury',
+            paymentMethod: 'Bank Transfer',
+            receiptOrVoucherRef: `BAL-ADJ-${Date.now().toString().slice(-4)}`,
+            recordedBy: recordedBy || 'admin@welfare.org'
+          });
+        }
+      } else {
+        newReserve = targetCurrent - netFlow;
+      }
+    }
+
+    await module.exports.updateSystemSettings({ initialReserve: newReserve });
+    return await module.exports.getFundSummary();
   }
 };

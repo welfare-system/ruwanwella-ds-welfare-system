@@ -25,7 +25,7 @@ if (connectionString) {
     ssl: isNeon ? { rejectUnauthorized: false } : false,
     max: 20, // Max concurrent connections in pool
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000
+    connectionTimeoutMillis: 30000
   });
 
   pool.on('connect', () => {

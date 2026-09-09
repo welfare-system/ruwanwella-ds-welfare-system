@@ -18,7 +18,8 @@ exports.updateSystemSettings = async (req, res) => {
       defaultContributionRate,
       maxLoanLimit,
       defaultInterestRate,
-      autoPayrollDeduction
+      autoPayrollDeduction,
+      initialReserve
     } = req.body;
 
     const updates = {};
@@ -30,6 +31,7 @@ exports.updateSystemSettings = async (req, res) => {
     if (maxLoanLimit !== undefined) updates.maxLoanLimit = Number(maxLoanLimit);
     if (defaultInterestRate !== undefined) updates.defaultInterestRate = Number(defaultInterestRate);
     if (autoPayrollDeduction !== undefined) updates.autoPayrollDeduction = Boolean(autoPayrollDeduction);
+    if (initialReserve !== undefined && !isNaN(Number(initialReserve))) updates.initialReserve = Number(initialReserve);
 
     const updated = await store.updateSystemSettings(updates);
 
