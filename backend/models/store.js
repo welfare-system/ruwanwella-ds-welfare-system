@@ -78,6 +78,18 @@ function formatDate(val) {
 
 function mapMember(row) {
   if (!row) return null;
+
+  let extractedIdNumber = row.id_number || "";
+  let extractedSewaAnkaya = row.sewa_ankaya || "";
+  if (!extractedIdNumber && row.notes) {
+    const match = row.notes.match(/NIC\/ID:\s*([^|\]]+)/);
+    if (match) extractedIdNumber = match[1].trim();
+  }
+  if (!extractedSewaAnkaya && row.notes) {
+    const match = row.notes.match(/Service No:\s*([^|\]]+)/);
+    if (match) extractedSewaAnkaya = match[1].trim();
+  }
+
   return {
     id: row.id,
     memberId: row.member_id,
@@ -85,6 +97,9 @@ function mapMember(row) {
     email: row.email,
     phone: row.phone,
     department: row.department,
+    thanthura: row.thanthura || row.department || "",
+    idNumber: extractedIdNumber,
+    sewaAnkaya: extractedSewaAnkaya,
     role: row.role,
     status: row.status,
     monthlyContribution: Number(row.monthly_contribution) || 0,
@@ -427,7 +442,7 @@ module.exports = {
       toInsert.name,
       toInsert.email,
       toInsert.phone,
-      toInsert.department || 'Operations',
+      toInsert.thanthura || toInsert.department || 'General Staff',
       toInsert.role || 'Member',
       toInsert.status || 'Active',
       toInsert.monthlyContribution || 100,

@@ -22,7 +22,10 @@ interface Member {
   name: string;
   email: string;
   phone: string;
-  department: string;
+  department?: string;
+  thanthura?: string;
+  idNumber?: string;
+  sewaAnkaya?: string;
   role: string;
   status: "Active" | "Inactive" | "Suspended" | "Pending";
   monthlyContribution: number;
@@ -220,7 +223,10 @@ export default function WelfareApp() {
     name: "",
     email: "",
     phone: "",
-    department: "Logistics & Transport",
+    thanthura: "",
+    idNumber: "",
+    sewaAnkaya: "",
+    department: "",
     role: "Member",
     monthlyContribution: 100,
     notes: "",
@@ -473,10 +479,14 @@ export default function WelfareApp() {
         headers["Authorization"] = `Bearer ${authToken}`;
       }
 
+      const payload = {
+        ...memberForm,
+        department: memberForm.thanthura || memberForm.department || "General Staff",
+      };
       const res = await fetch(`${API_BASE}/api/members`, {
         method: "POST",
         headers,
-        body: JSON.stringify(memberForm),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to add member");
@@ -488,7 +498,10 @@ export default function WelfareApp() {
         name: "",
         email: "",
         phone: "",
-        department: "Logistics & Transport",
+        thanthura: "",
+        idNumber: "",
+        sewaAnkaya: "",
+        department: "",
         role: "Member",
         monthlyContribution: systemSettings.defaultContributionRate || 100,
         notes: "",
@@ -509,13 +522,17 @@ export default function WelfareApp() {
     e.preventDefault();
     if (!selectedMember) return;
     try {
+      const payload = {
+        ...memberForm,
+        department: memberForm.thanthura || memberForm.department || "General Staff",
+      };
       const res = await fetch(`${API_BASE}/api/members/${selectedMember.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${authToken}`,
         },
-        body: JSON.stringify(memberForm),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to update member");
@@ -569,7 +586,10 @@ export default function WelfareApp() {
       name: m.name,
       email: m.email,
       phone: m.phone,
-      department: m.department,
+      thanthura: m.thanthura || m.department || "",
+      idNumber: m.idNumber || "",
+      sewaAnkaya: m.sewaAnkaya || "",
+      department: m.department || "",
       role: m.role,
       monthlyContribution: m.monthlyContribution,
       notes: m.notes || "",
@@ -891,8 +911,11 @@ export default function WelfareApp() {
       const matchesSearch =
         m.name.toLowerCase().includes(memberSearch.toLowerCase()) ||
         m.memberId.toLowerCase().includes(memberSearch.toLowerCase()) ||
-        m.department.toLowerCase().includes(memberSearch.toLowerCase());
-      const matchesDept = memberDeptFilter === "All" || m.department === memberDeptFilter;
+        (m.thanthura && m.thanthura.toLowerCase().includes(memberSearch.toLowerCase())) ||
+        (m.idNumber && m.idNumber.toLowerCase().includes(memberSearch.toLowerCase())) ||
+        (m.sewaAnkaya && m.sewaAnkaya.toLowerCase().includes(memberSearch.toLowerCase())) ||
+        (m.department && m.department.toLowerCase().includes(memberSearch.toLowerCase()));
+      const matchesDept = memberDeptFilter === "All" || m.department === memberDeptFilter || m.thanthura === memberDeptFilter;
       const matchesStatus = memberStatusFilter === "All" || m.status === memberStatusFilter;
       return matchesSearch && matchesDept && matchesStatus;
     });
@@ -1352,7 +1375,7 @@ export default function WelfareApp() {
                   <input
                     type="text"
                     className="form-input"
-                    placeholder={language === "si" ? "උදා: කේ. ඒ. නිමල් පෙරේරා" : "e.g. Dr. Jane Foster"}
+                    placeholder={language === "si" ? "උදා: කේ. ඒ. නිමල් පෙරේරා" : "e.g. K. A. Nimal Perera"}
                     required
                     value={memberForm.name}
                     onChange={(e) => setMemberForm({ ...memberForm, name: e.target.value })}
@@ -1360,13 +1383,44 @@ export default function WelfareApp() {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">{language === "si" ? "විද්‍යුත් තැපැල් ලිපිනය (විකල්පයි)" : "Email Address (Optional)"}</label>
+                  <label className="form-label">
+                    {language === "si" ? "හැඳුනුම්පත් අංකය (ID Number) *" : "ID Number (NIC) *"}
+                  </label>
                   <input
-                    type="email"
+                    type="text"
                     className="form-input"
-                    placeholder="nimal.perera@org.internal"
-                    value={memberForm.email}
-                    onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
+                    placeholder={language === "si" ? "උදා: 199012345678 / 901234567V" : "e.g. 199012345678 / 901234567V"}
+                    required
+                    value={memberForm.idNumber}
+                    onChange={(e) => setMemberForm({ ...memberForm, idNumber: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    {language === "si" ? "සේවා අංකය (Sewa Ankaya) *" : "Sewa Ankaya (Service ID) *"}
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder={language === "si" ? "උදා: SO-4089 / 12345" : "e.g. SO-4089 / 12345"}
+                    required
+                    value={memberForm.sewaAnkaya}
+                    onChange={(e) => setMemberForm({ ...memberForm, sewaAnkaya: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    {language === "si" ? "තනතුර - Thanthura (Designation/Post) *" : "Thanthura (Designation/Post) *"}
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder={language === "si" ? "උදා: සංවර්ධන නිලධාරී / පරිපාලන නිලධාරී" : "e.g. Development Officer / Administrative Officer"}
+                    required
+                    value={memberForm.thanthura}
+                    onChange={(e) => setMemberForm({ ...memberForm, thanthura: e.target.value })}
                   />
                 </div>
 
@@ -1383,19 +1437,14 @@ export default function WelfareApp() {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">{t(language, "departmentLabel")}</label>
-                  <select
-                    className="form-select"
-                    value={memberForm.department}
-                    onChange={(e) => setMemberForm({ ...memberForm, department: e.target.value })}
-                  >
-                    <option value="Logistics & Transport">{language === "si" ? "ප්‍රවාහන සහ සැපයුම්" : "Logistics & Transport"}</option>
-                    <option value="Medical Operations">{language === "si" ? "වෛද්‍ය මෙහෙයුම්" : "Medical Operations"}</option>
-                    <option value="Information Technology">{language === "si" ? "තොරතුරු තාක්ෂණ (IT)" : "Information Technology"}</option>
-                    <option value="Human Resources">{language === "si" ? "මානව සම්පත්" : "Human Resources"}</option>
-                    <option value="Field Research">{language === "si" ? "ක්ෂේත්‍ර පර්යේෂණ" : "Field Research"}</option>
-                    <option value="Administration">{language === "si" ? "පරිපාලන අංශය" : "Administration"}</option>
-                  </select>
+                  <label className="form-label">{language === "si" ? "විද්‍යුත් තැපැල් ලිපිනය (විකල්පයි)" : "Email Address (Optional)"}</label>
+                  <input
+                    type="email"
+                    className="form-input"
+                    placeholder="nimal.perera@org.internal"
+                    value={memberForm.email}
+                    onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
+                  />
                 </div>
 
                 <div className="form-group">
@@ -1412,7 +1461,7 @@ export default function WelfareApp() {
                   </select>
                 </div>
 
-                <div className="form-group">
+                <div className="form-group full">
                   <label className="form-label">{language === "si" ? `මාසික දායකත්ව පොරොන්දුව (${curr}) *` : `Monthly Pledge (${curr}) *`}</label>
                   <input
                     type="number"
@@ -1447,7 +1496,10 @@ export default function WelfareApp() {
                       name: "",
                       email: "",
                       phone: "",
-                      department: "Logistics & Transport",
+                      thanthura: "",
+                      idNumber: "",
+                      sewaAnkaya: "",
+                      department: "",
                       role: "Member",
                       monthlyContribution: systemSettings.defaultContributionRate || 100,
                       notes: "",
@@ -1779,7 +1831,7 @@ export default function WelfareApp() {
                   <tr>
                     <th>{t(language, "colMemberId")}</th>
                     <th>{language === "si" ? "නම සහ තොරතුරු" : "Name & Contact"}</th>
-                    <th>{language === "si" ? "දෙපාර්තමේන්තුව සහ තනතුර" : "Department & Role"}</th>
+                    <th>{language === "si" ? "තනතුර සහ වගකීම" : "Designation & Role"}</th>
                     <th>{t(language, "colMonthlyPledge")}</th>
                     <th>{t(language, "colTotalContributed")}</th>
                     <th>{t(language, "colStatus")}</th>
@@ -1802,11 +1854,16 @@ export default function WelfareApp() {
                         <td>
                           <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{m.name}</div>
                           <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                            {m.email} • {m.phone}
+                            {[m.email, m.phone].filter(Boolean).join(" • ")}
                           </div>
+                          {(m.idNumber || m.sewaAnkaya) && (
+                            <div style={{ fontSize: "0.74rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                              {[m.idNumber && `NIC: ${m.idNumber}`, m.sewaAnkaya && `Sewa: ${m.sewaAnkaya}`].filter(Boolean).join(" • ")}
+                            </div>
+                          )}
                         </td>
                         <td>
-                          <div style={{ color: "var(--text-secondary)" }}>{m.department}</div>
+                          <div style={{ color: "var(--text-secondary)", fontWeight: 500 }}>{m.thanthura || m.department}</div>
                           <div style={{ fontSize: "0.78rem", color: "var(--accent-cyan)" }}>{m.role}</div>
                         </td>
                         <td style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>
@@ -2771,7 +2828,7 @@ export default function WelfareApp() {
                     <input
                       type="text"
                       className="form-input"
-                      placeholder={language === "si" ? "උදා: කේ. ඒ. නිමල් පෙරේරා" : "e.g. Dr. Jane Foster"}
+                      placeholder={language === "si" ? "උදා: කේ. ඒ. නිමල් පෙරේරා" : "e.g. K. A. Nimal Perera"}
                       required
                       value={memberForm.name}
                       onChange={(e) => setMemberForm({ ...memberForm, name: e.target.value })}
@@ -2779,13 +2836,44 @@ export default function WelfareApp() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">{language === "si" ? "විද්‍යුත් තැපැල් ලිපිනය (විකල්පයි)" : "Email Address (Optional)"}</label>
+                    <label className="form-label">
+                      {language === "si" ? "හැඳුනුම්පත් අංකය (ID Number) *" : "ID Number (NIC) *"}
+                    </label>
                     <input
-                      type="email"
+                      type="text"
                       className="form-input"
-                      placeholder="nimal.perera@org.internal"
-                      value={memberForm.email}
-                      onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
+                      placeholder={language === "si" ? "උදා: 199012345678 / 901234567V" : "e.g. 199012345678 / 901234567V"}
+                      required
+                      value={memberForm.idNumber}
+                      onChange={(e) => setMemberForm({ ...memberForm, idNumber: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">
+                      {language === "si" ? "සේවා අංකය (Sewa Ankaya) *" : "Sewa Ankaya (Service ID) *"}
+                    </label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder={language === "si" ? "උදා: SO-4089 / 12345" : "e.g. SO-4089 / 12345"}
+                      required
+                      value={memberForm.sewaAnkaya}
+                      onChange={(e) => setMemberForm({ ...memberForm, sewaAnkaya: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">
+                      {language === "si" ? "තනතුර - Thanthura (Designation/Post) *" : "Thanthura (Designation/Post) *"}
+                    </label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder={language === "si" ? "උදා: සංවර්ධන නිලධාරී / කළමනාකරණ සේවා නිලධාරී" : "e.g. Development Officer / Administrative Officer"}
+                      required
+                      value={memberForm.thanthura}
+                      onChange={(e) => setMemberForm({ ...memberForm, thanthura: e.target.value })}
                     />
                   </div>
 
@@ -2802,19 +2890,14 @@ export default function WelfareApp() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">{t(language, "departmentLabel")}</label>
-                    <select
-                      className="form-select"
-                      value={memberForm.department}
-                      onChange={(e) => setMemberForm({ ...memberForm, department: e.target.value })}
-                    >
-                      <option value="Logistics & Transport">{language === "si" ? "ප්‍රවාහන සහ සැපයුම්" : "Logistics & Transport"}</option>
-                      <option value="Medical Operations">{language === "si" ? "වෛද්‍ය මෙහෙයුම්" : "Medical Operations"}</option>
-                      <option value="Information Technology">{language === "si" ? "තොරතුරු තාක්ෂණ (IT)" : "Information Technology"}</option>
-                      <option value="Human Resources">{language === "si" ? "මානව සම්පත්" : "Human Resources"}</option>
-                      <option value="Field Research">{language === "si" ? "ක්ෂේත්‍ර පර්යේෂණ" : "Field Research"}</option>
-                      <option value="Administration">{language === "si" ? "පරිපාලන අංශය" : "Administration"}</option>
-                    </select>
+                    <label className="form-label">{language === "si" ? "විද්‍යුත් තැපැල් ලිපිනය (විකල්පයි)" : "Email Address (Optional)"}</label>
+                    <input
+                      type="email"
+                      className="form-input"
+                      placeholder="nimal.perera@org.internal"
+                      value={memberForm.email}
+                      onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
+                    />
                   </div>
 
                   <div className="form-group">
@@ -2831,7 +2914,7 @@ export default function WelfareApp() {
                     </select>
                   </div>
 
-                  <div className="form-group">
+                  <div className="form-group full">
                     <label className="form-label">{language === "si" ? `මාසික දායකත්ව පොරොන්දුව (${curr}) *` : `Monthly Pledge (${curr}) *`}</label>
                     <input
                       type="number"
@@ -2891,12 +2974,34 @@ export default function WelfareApp() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">{language === "si" ? "විද්‍යුත් තැපැල් ලිපිනය (විකල්පයි)" : "Email (Optional)"}</label>
+                    <label className="form-label">{language === "si" ? "හැඳුනුම්පත් අංකය (ID Number)" : "ID Number (NIC)"}</label>
                     <input
-                      type="email"
+                      type="text"
                       className="form-input"
-                      value={memberForm.email}
-                      onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
+                      placeholder="e.g. 199012345678 / 901234567V"
+                      value={memberForm.idNumber}
+                      onChange={(e) => setMemberForm({ ...memberForm, idNumber: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">{language === "si" ? "සේවා අංකය (Sewa Ankaya)" : "Sewa Ankaya (Service ID)"}</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. SO-4089 / 12345"
+                      value={memberForm.sewaAnkaya}
+                      onChange={(e) => setMemberForm({ ...memberForm, sewaAnkaya: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">{language === "si" ? "තනතුර (Thanthura / Designation)" : "Thanthura (Designation/Post)"}</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={memberForm.thanthura}
+                      onChange={(e) => setMemberForm({ ...memberForm, thanthura: e.target.value })}
                     />
                   </div>
 
@@ -2912,17 +3017,17 @@ export default function WelfareApp() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">{language === "si" ? "දෙපාර්තමේන්තුව" : "Department"}</label>
+                    <label className="form-label">{language === "si" ? "විද්‍යුත් තැපැල් ලිපිනය (විකල්පයි)" : "Email (Optional)"}</label>
                     <input
-                      type="text"
+                      type="email"
                       className="form-input"
-                      value={memberForm.department}
-                      onChange={(e) => setMemberForm({ ...memberForm, department: e.target.value })}
+                      value={memberForm.email}
+                      onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
                     />
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">{language === "si" ? "තනතුර" : "Role"}</label>
+                    <label className="form-label">{language === "si" ? "සුබසාධක සංගමයේ තනතුර" : "Role in Welfare"}</label>
                     <input
                       type="text"
                       className="form-input"
@@ -2978,8 +3083,13 @@ export default function WelfareApp() {
                 <div className="profile-meta">
                   <h3>{selectedMember.name}</h3>
                   <p>
-                    {selectedMember.memberId} • {selectedMember.role} • {selectedMember.department}
+                    {selectedMember.memberId} • {selectedMember.role} • {selectedMember.thanthura || selectedMember.department}
                   </p>
+                  {(selectedMember.idNumber || selectedMember.sewaAnkaya) && (
+                    <p style={{ marginTop: "2px", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                      {[selectedMember.idNumber && `NIC/ID: ${selectedMember.idNumber}`, selectedMember.sewaAnkaya && `Sewa No: ${selectedMember.sewaAnkaya}`].filter(Boolean).join(" • ")}
+                    </p>
+                  )}
                   <p style={{ marginTop: "4px" }}>
                     {language === "si" ? "බැඳුණු දිනය:" : "Joined:"} {selectedMember.joinDate} • {language === "si" ? "මාසික දායකත්වය:" : "Monthly Pledge:"} <strong>{curr}{selectedMember.monthlyContribution}</strong>
                   </p>

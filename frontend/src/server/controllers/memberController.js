@@ -64,7 +64,7 @@ exports.getMemberById = async (req, res) => {
 
 exports.createMember = async (req, res) => {
   try {
-    const { name, email, phone, department, role, monthlyContribution, notes } = req.body;
+    const { name, email, phone, department, role, monthlyContribution, notes, thanthura, idNumber, sewaAnkaya } = req.body;
 
     if (!name || !phone) {
       return res.status(400).json({
@@ -74,6 +74,17 @@ exports.createMember = async (req, res) => {
     }
 
     const cleanEmail = email && typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : null;
+    const resolvedThanthura = (thanthura && thanthura.trim()) || (department ? department.trim() : 'General Staff');
+    const resolvedIdNumber = idNumber ? idNumber.trim() : '';
+    const resolvedSewaAnkaya = sewaAnkaya ? sewaAnkaya.trim() : '';
+
+    const metaNotes = [];
+    if (resolvedIdNumber) metaNotes.push(`NIC/ID: ${resolvedIdNumber}`);
+    if (resolvedSewaAnkaya) metaNotes.push(`Service No: ${resolvedSewaAnkaya}`);
+    const finalNotes = [
+      metaNotes.length ? `[${metaNotes.join(' | ')}]` : '',
+      notes ? notes.trim() : ''
+    ].filter(Boolean).join(' ');
 
     // Retry loop with sequence check to guarantee zero duplicate key constraint violations
     let attempts = 0;
@@ -91,13 +102,16 @@ exports.createMember = async (req, res) => {
         name: name.trim(),
         email: cleanEmail,
         phone: phone.trim(),
-        department: department ? department.trim() : 'Operations',
+        department: resolvedThanthura,
+        thanthura: resolvedThanthura,
+        idNumber: resolvedIdNumber,
+        sewaAnkaya: resolvedSewaAnkaya,
         role: role ? role.trim() : 'Member',
         status: 'Active',
         monthlyContribution: Number(monthlyContribution) || 100,
         totalContributed: 0,
         joinDate: new Date().toISOString().split('T')[0],
-        notes: notes ? notes.trim() : ''
+        notes: finalNotes
       };
 
       try {
@@ -119,19 +133,22 @@ exports.createMember = async (req, res) => {
         if (isDuplicateEmail) {
           return res.status(400).json({
             success: false,
-            error: 'A member with this email address is already registered.'
+            error: `Email address "${cleanEmail}" is already registered to another member.`
           });
         }
 
-        if (isDuplicateMemberId && attempts < maxAttempts) {
-          // Collision on member_id detected, retry with next sequence ID
+        if (isDuplicateMemberId) {
+          console.warn(`[Member ID Collision] Auto-assigned ${memberId} collided. Re-syncing sequence on attempt ${attempts}...`);
+          try {
+            await store.syncMemberIdSequence();
+          } catch (syncErr) {
+            console.error('Failed to re-sync sequence:', syncErr.message);
+          }
           continue;
         }
 
-        if (attempts >= maxAttempts) {
-          // Final fallback: generate a timestamp-random unique sequence
-          const fallbackMemberId = `WLF-${Date.now().toString().slice(-6)}${Math.floor(10 + Math.random() * 90)}`;
-          newMember.memberId = fallbackMemberId;
+        // Handle generic fallback error where id primary key collided
+        if (insertErr.code === '23505' && (insertErr.constraint === 'members_pkey' || (insertErr.detail && insertErr.detail.includes('Key (id)')))) {
           newMember.id = `mem_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
           created = await store.addMember(newMember);
           break;
@@ -165,6 +182,9 @@ exports.updateMember = async (req, res) => {
     delete updates.id;
     delete updates.memberId;
 
+    if (updates.thanthura) {
+      updates.department = updates.thanthura.trim();
+    }
     if (updates.monthlyContribution !== undefined) {
       updates.monthlyContribution = Number(updates.monthlyContribution);
     }
