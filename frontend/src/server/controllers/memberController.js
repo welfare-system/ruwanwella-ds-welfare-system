@@ -83,22 +83,41 @@ exports.createMember = async (req, res) => {
       });
     }
 
+    if (!idNumber || !String(idNumber).trim()) {
+      return res.status(400).json({
+        success: false,
+        field: 'idNumber',
+        error: 'ID Number (NIC) is mandatory and required.'
+      });
+    }
+
+    const cleanIdNumber = String(idNumber).trim();
     const cleanEmail = email && typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : null;
     const resolvedThanthura = (thanthura && thanthura.trim()) || (department ? department.trim() : 'General Staff');
-    const resolvedIdNumber = idNumber ? idNumber.trim() : '';
     const resolvedSewaAnkaya = sewaAnkaya ? sewaAnkaya.trim() : '';
 
     const metaNotes = [];
-    if (resolvedIdNumber) metaNotes.push(`NIC/ID: ${resolvedIdNumber}`);
+    if (cleanIdNumber) metaNotes.push(`NIC/ID: ${cleanIdNumber}`);
     if (resolvedSewaAnkaya) metaNotes.push(`Service No: ${resolvedSewaAnkaya}`);
     const finalNotes = [
       metaNotes.length ? `[${metaNotes.join(' | ')}]` : '',
       notes ? notes.trim() : ''
     ].filter(Boolean).join(' ');
 
+    // Immediate check specifically for duplicate ID Number
+    const idDupCheck = await store.checkMemberDuplicate({ idNumber: cleanIdNumber });
+    if (idDupCheck.hasDuplicate && idDupCheck.field === 'idNumber') {
+      return res.status(400).json({
+        success: false,
+        field: 'idNumber',
+        error: idDupCheck.error,
+        conflictingMember: idDupCheck.conflictingMember
+      });
+    }
+
     // Duplicate validation: Check ID Number (NIC), Sewa Ankaya (Service ID), and Email Address
     const dupCheck = await store.checkMemberDuplicate({
-      idNumber: resolvedIdNumber,
+      idNumber: cleanIdNumber,
       sewaAnkaya: resolvedSewaAnkaya,
       email: cleanEmail
     });
@@ -130,7 +149,7 @@ exports.createMember = async (req, res) => {
         phone: phone.trim(),
         department: resolvedThanthura,
         thanthura: resolvedThanthura,
-        idNumber: resolvedIdNumber,
+        idNumber: cleanIdNumber,
         sewaAnkaya: resolvedSewaAnkaya,
         role: role ? role.trim() : 'Member',
         status: 'Active',
@@ -144,6 +163,22 @@ exports.createMember = async (req, res) => {
         created = await store.addMember(newMember);
         break; // Successfully registered
       } catch (insertErr) {
+        const isDuplicateIdNumber =
+          insertErr.code === '23505' &&
+          (insertErr.constraint === 'members_id_number_unique' ||
+           insertErr.constraint === 'members_id_number_key' ||
+           insertErr.constraint === 'members_id_number_unique_idx' ||
+           (insertErr.detail && insertErr.detail.includes('id_number')) ||
+           (insertErr.message && insertErr.message.includes('id_number')));
+
+        if (isDuplicateIdNumber) {
+          return res.status(400).json({
+            success: false,
+            field: 'idNumber',
+            error: `A member with ID Number (NIC) "${cleanIdNumber}" already exists in system records. Duplicate registration is blocked.`
+          });
+        }
+
         const isDuplicateMemberId =
           insertErr.code === '23505' &&
           (insertErr.constraint === 'members_member_id_key' ||
@@ -208,6 +243,14 @@ exports.updateMember = async (req, res) => {
     delete updates.id;
     delete updates.memberId;
 
+    if (updates.idNumber !== undefined && (!updates.idNumber || !String(updates.idNumber).trim())) {
+      return res.status(400).json({
+        success: false,
+        field: 'idNumber',
+        error: 'ID Number (NIC) cannot be empty.'
+      });
+    }
+
     const dupCheck = await store.checkMemberDuplicate({
       idNumber: updates.idNumber !== undefined ? updates.idNumber : existing.idNumber,
       sewaAnkaya: updates.sewaAnkaya !== undefined ? updates.sewaAnkaya : existing.sewaAnkaya,
@@ -254,6 +297,13 @@ exports.updateMember = async (req, res) => {
       data: updated
     });
   } catch (err) {
+    if (err.code === '23505' && (err.constraint === 'members_id_number_unique' || err.constraint === 'members_id_number_unique_idx' || (err.detail && err.detail.includes('id_number')))) {
+      return res.status(400).json({
+        success: false,
+        field: 'idNumber',
+        error: `A member with ID Number (NIC) "${req.body.idNumber}" already exists in system records. Duplicate is blocked.`
+      });
+    }
     res.status(500).json({ success: false, error: err.message });
   }
 };

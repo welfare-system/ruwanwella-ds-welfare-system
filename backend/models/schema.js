@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS members (
   phone VARCHAR(50) NOT NULL,
   department VARCHAR(100) NOT NULL,
   thanthura VARCHAR(100),
-  id_number VARCHAR(100),
+  id_number VARCHAR(100) NOT NULL UNIQUE,
   sewa_ankaya VARCHAR(100),
   role VARCHAR(50) NOT NULL DEFAULT 'Member',
   status VARCHAR(20) NOT NULL DEFAULT 'Active',
@@ -62,20 +62,21 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS loans (
   id VARCHAR(64) PRIMARY KEY,
   loan_id VARCHAR(32) UNIQUE NOT NULL,
-  member_id VARCHAR(32) REFERENCES members(member_id) ON DELETE CASCADE,
+  member_id VARCHAR(32) NOT NULL REFERENCES members(member_id) ON DELETE CASCADE,
   member_name VARCHAR(255) NOT NULL,
   principal_amount NUMERIC(12,2) NOT NULL,
-  interest_rate NUMERIC(5,2) NOT NULL DEFAULT 4.5,
+  interest_rate NUMERIC(5,2) NOT NULL,
   term_months INTEGER NOT NULL,
+  total_interest NUMERIC(12,2) NOT NULL,
   total_repayable NUMERIC(12,2) NOT NULL,
-  monthly_payment NUMERIC(12,2) NOT NULL,
+  monthly_emi NUMERIC(12,2) NOT NULL,
   amount_repaid NUMERIC(12,2) NOT NULL DEFAULT 0,
   remaining_balance NUMERIC(12,2) NOT NULL,
-  purpose TEXT NOT NULL,
   status VARCHAR(20) NOT NULL DEFAULT 'Pending',
-  application_date DATE NOT NULL DEFAULT CURRENT_DATE,
-  disbursed_date DATE,
-  next_due_date DATE,
+  purpose VARCHAR(255) NOT NULL,
+  applied_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  approval_date DATE,
+  rejection_reason TEXT DEFAULT '',
   notes TEXT DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -85,7 +86,7 @@ CREATE TABLE IF NOT EXISTS loans (
 CREATE TABLE IF NOT EXISTS contributions (
   id VARCHAR(64) PRIMARY KEY,
   receipt_no VARCHAR(32) UNIQUE NOT NULL,
-  member_id VARCHAR(32) REFERENCES members(member_id) ON DELETE CASCADE,
+  member_id VARCHAR(32) NOT NULL REFERENCES members(member_id) ON DELETE CASCADE,
   member_name VARCHAR(255) NOT NULL,
   amount NUMERIC(12,2) NOT NULL,
   month_covered VARCHAR(50) NOT NULL,
@@ -95,22 +96,21 @@ CREATE TABLE IF NOT EXISTS contributions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- 6. Transactions Table (Incomes and Expenses)
+-- 6. Transactions Table (Finance Income & Expenses)
 CREATE TABLE IF NOT EXISTS transactions (
   id VARCHAR(64) PRIMARY KEY,
   voucher_no VARCHAR(32) UNIQUE NOT NULL,
   type VARCHAR(20) NOT NULL,
   category VARCHAR(50) NOT NULL,
-  category_name VARCHAR(255) NOT NULL,
-  amount NUMERIC(12,2) NOT NULL,
-  date DATE NOT NULL DEFAULT CURRENT_DATE,
   title VARCHAR(255) NOT NULL,
+  amount NUMERIC(12,2) NOT NULL,
   description TEXT DEFAULT '',
-  party_name VARCHAR(255) NOT NULL,
   payment_method VARCHAR(50) NOT NULL DEFAULT 'Cash',
-  receipt_or_voucher_ref VARCHAR(100),
-  recorded_by VARCHAR(255) NOT NULL DEFAULT 'admin@welfare.org',
-  recorded_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  reference_no VARCHAR(100) DEFAULT '',
+  recipient_or_payer VARCHAR(255) DEFAULT '',
+  transaction_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  recorded_by VARCHAR(255) NOT NULL DEFAULT 'System Admin',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 `;
 
@@ -136,6 +136,8 @@ async function initDatabase() {
       await db.query('ALTER TABLE members ADD COLUMN IF NOT EXISTS thanthura VARCHAR(100);');
       await db.query('ALTER TABLE members ADD COLUMN IF NOT EXISTS id_number VARCHAR(100);');
       await db.query('ALTER TABLE members ADD COLUMN IF NOT EXISTS sewa_ankaya VARCHAR(100);');
+      
+      // Backfill from notes if empty
       await db.query(`
         UPDATE members 
         SET id_number = substring(notes from 'NIC/ID:\\s*([^|\\]]+)')
@@ -146,7 +148,49 @@ async function initDatabase() {
         SET sewa_ankaya = substring(notes from 'Service No:\\s*([^|\\]]+)')
         WHERE (sewa_ankaya IS NULL OR sewa_ankaya = '') AND notes ~ 'Service No:';
       `);
-    } catch (_) {}
+
+      // Trim all id_numbers
+      await db.query(`
+        UPDATE members 
+        SET id_number = TRIM(id_number)
+        WHERE id_number IS NOT NULL;
+      `);
+
+      // Fill any remaining NULL or empty id_numbers with unique fallback
+      await db.query(`
+        UPDATE members 
+        SET id_number = 'NIC-' || member_id
+        WHERE id_number IS NULL OR id_number = '';
+      `);
+
+      // Deduplicate any pre-existing duplicates in historical records before applying constraint
+      await db.query(`
+        WITH duplicates AS (
+          SELECT id, ROW_NUMBER() OVER (PARTITION BY UPPER(TRIM(id_number)) ORDER BY created_at ASC, id ASC) as rn
+          FROM members
+          WHERE id_number IS NOT NULL AND id_number <> ''
+        )
+        UPDATE members m
+        SET id_number = TRIM(m.id_number) || '-D' || d.rn
+        FROM duplicates d
+        WHERE m.id = d.id AND d.rn > 1;
+      `);
+
+      // Enforce NOT NULL on id_number
+      try {
+        await db.query('ALTER TABLE members ALTER COLUMN id_number SET NOT NULL;');
+      } catch (_) {}
+
+      // Enforce case-insensitive UNIQUE index on id_number
+      await db.query('CREATE UNIQUE INDEX IF NOT EXISTS members_id_number_unique_idx ON members (UPPER(TRIM(id_number)));');
+
+      // Enforce standard UNIQUE constraint on id_number
+      try {
+        await db.query('ALTER TABLE members ADD CONSTRAINT members_id_number_unique UNIQUE (id_number);');
+      } catch (_) {}
+    } catch (migErr) {
+      console.warn('⚠️ id_number migration warning:', migErr.message);
+    }
     console.log('✅ PostgreSQL tables verified / created.');
 
     // 1. Seed System Settings

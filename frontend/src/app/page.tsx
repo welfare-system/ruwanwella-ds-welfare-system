@@ -543,6 +543,24 @@ export default function WelfareApp() {
     e.preventDefault();
     setMemberFormError(null);
 
+    if (!memberForm.name.trim() || !memberForm.phone.trim()) {
+      const errMsg = language === "si"
+        ? "නම සහ දුරකථන අංකය ඇතුළත් කිරීම අනිවාර්ය වේ."
+        : "Name and phone number are required.";
+      setMemberFormError(errMsg);
+      notify("error", errMsg);
+      return;
+    }
+
+    if (!memberForm.idNumber?.trim()) {
+      const errMsg = language === "si"
+        ? "හැඳුනුම්පත් අංකය (ID Number / NIC) ඇතුළත් කිරීම අනිවාර්ය වේ."
+        : "ID Number (NIC) is mandatory and required.";
+      setMemberFormError(errMsg);
+      notify("error", errMsg);
+      return;
+    }
+
     // Client-side duplicate check: block submission if already registered
     if (duplicateValidation.hasDuplicate) {
       const errorMsg =
@@ -641,6 +659,22 @@ export default function WelfareApp() {
   const handleUpdateMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedMember) return;
+
+    if (!memberForm.name.trim() || !memberForm.phone.trim()) {
+      const errMsg = language === "si"
+        ? "නම සහ දුරකථන අංකය ඇතුළත් කිරීම අනිවාර්ය වේ."
+        : "Name and phone number are required.";
+      notify("error", errMsg);
+      return;
+    }
+
+    if (!memberForm.idNumber?.trim()) {
+      const errMsg = language === "si"
+        ? "හැඳුනුම්පත් අංකය (ID Number / NIC) ඇතුළත් කිරීම අනිවාර්ය වේ."
+        : "ID Number (NIC) is mandatory and required.";
+      notify("error", errMsg);
+      return;
+    }
 
     // Client-side duplicate check against other members
     const cleanId = memberForm.idNumber?.trim().toUpperCase() || "";
@@ -1871,7 +1905,13 @@ export default function WelfareApp() {
           {/* Top Metrics Grid */}
           {activeTab !== "settings" && (
             <div className="metrics-grid">
-              <div className="metric-card" style={{ position: "relative", display: "flex", flexDirection: "column" }}>
+              {/* Metric Card 1: Total Fund Balance (Cash Pool) */}
+              <div
+                className="metric-card cursor-pointer"
+                style={{ position: "relative", display: "flex", flexDirection: "column" }}
+                onClick={() => setActiveTab(activeTab === "finance" ? "overview" : "finance")}
+                title={language === "si" ? "මූල්‍ය විස්තර පටිත්ත වෙත යන්න (Click to switch)" : "View Financial Overview / Finance (Click to switch)"}
+              >
                 <div className="metric-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <span className="metric-label">{t(language, "cashPool")}</span>
                   <div className="metric-icon icon-emerald">{curr}</div>
@@ -1882,15 +1922,23 @@ export default function WelfareApp() {
                 </div>
                 <div className="metric-subtext">{t(language, "cashPoolSubtitle")}</div>
 
-                {/* Explicitly visible, enabled Admin Manage Button */}
+                {/* Explicitly visible, enabled Admin Manage Button - Left Aligned */}
                 {isAdmin && (
-                  <div style={{ marginTop: "auto", paddingTop: "14px", borderTop: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                  <div
+                    className="flex flex-row items-center justify-start gap-3"
+                    style={{
+                      marginTop: "auto",
+                      paddingTop: "14px",
+                      borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+                      width: "100%"
+                    }}
+                  >
                     <button
                       type="button"
                       id="btn-manage-cash-pool"
                       style={{
-                        width: "100%",
-                        padding: "8px 12px",
+                        width: "auto",
+                        padding: "8px 14px",
                         fontSize: "0.82rem",
                         fontWeight: 700,
                         borderRadius: "8px",
@@ -1900,7 +1948,7 @@ export default function WelfareApp() {
                         cursor: "pointer",
                         display: "inline-flex",
                         alignItems: "center",
-                        justifyContent: "center",
+                        justifyContent: "flex-start",
                         gap: "8px",
                         transition: "all 0.2s ease",
                         boxShadow: "0 2px 8px rgba(16, 185, 129, 0.15)",
@@ -1915,7 +1963,10 @@ export default function WelfareApp() {
                         e.currentTarget.style.background = "linear-gradient(135deg, rgba(16, 185, 129, 0.22) 0%, rgba(5, 150, 105, 0.32) 100%)";
                         e.currentTarget.style.borderColor = "rgba(16, 185, 129, 0.5)";
                       }}
-                      onClick={() => openBalanceModal("current")}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openBalanceModal("current");
+                      }}
                       title={language === "si" ? "ගිණුම් ශේෂය කළමනාකරණය / යාවත්කාලීන කරන්න" : "Manage / update association account balance"}
                     >
                       <span style={{ fontSize: "1rem" }}>⚙️</span>
@@ -1925,7 +1976,13 @@ export default function WelfareApp() {
                 )}
               </div>
 
-              <div className="metric-card">
+              {/* Metric Card 2: Outstanding Loans */}
+              <div
+                className="metric-card cursor-pointer"
+                style={{ position: "relative", display: "flex", flexDirection: "column" }}
+                onClick={() => setActiveTab("loans")}
+                title={language === "si" ? "ණය පටිත්ත වෙත යන්න (Click to view loans)" : "View Loans Tab (Click to switch)"}
+              >
                 <div className="metric-header">
                   <span className="metric-label">{t(language, "outstandingDebt")}</span>
                   <div className="metric-icon icon-amber">💳</div>
@@ -1935,9 +1992,54 @@ export default function WelfareApp() {
                   {fund ? fund.totalOutstandingDebt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."}
                 </div>
                 <div className="metric-subtext">{fund ? `${fund.activeLoansCount} ${language === "si" ? "සක්‍රීය ණය ශේෂයන්" : "active loans outstanding"}` : "..."}</div>
+
+                {isAdmin && (
+                  <div
+                    className="flex flex-row items-center justify-start gap-3"
+                    style={{
+                      marginTop: "auto",
+                      paddingTop: "14px",
+                      borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+                      width: "100%"
+                    }}
+                  >
+                    <button
+                      type="button"
+                      style={{
+                        width: "auto",
+                        padding: "8px 14px",
+                        fontSize: "0.82rem",
+                        fontWeight: 700,
+                        borderRadius: "8px",
+                        background: "rgba(245, 158, 11, 0.18)",
+                        border: "1px solid rgba(245, 158, 11, 0.45)",
+                        color: "#fbbf24",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "flex-start",
+                        gap: "8px",
+                        transition: "all 0.2s ease",
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveTab("loans");
+                      }}
+                    >
+                      <span>💳</span>
+                      <span>{language === "si" ? "ණය කළමනාකරණය" : "Manage Loans"}</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
-              <div className="metric-card">
+              {/* Metric Card 3: Contributions Collected */}
+              <div
+                className="metric-card cursor-pointer"
+                style={{ position: "relative", display: "flex", flexDirection: "column" }}
+                onClick={() => setActiveTab("contributions")}
+                title={language === "si" ? "දායකත්ව පටිත්ත වෙත යන්න (Click to view contributions)" : "View Contributions Tab (Click to switch)"}
+              >
                 <div className="metric-header">
                   <span className="metric-label">{t(language, "contributionsCollected")}</span>
                   <div className="metric-icon icon-blue">📈</div>
@@ -1947,9 +2049,54 @@ export default function WelfareApp() {
                   {fund ? fund.totalContributionsCollected.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."}
                 </div>
                 <div className="metric-subtext">{language === "si" ? "එකතු වූ මුළු තැන්පතු" : "Cumulative Member Deposits"}</div>
+
+                {isAdmin && (
+                  <div
+                    className="flex flex-row items-center justify-start gap-3"
+                    style={{
+                      marginTop: "auto",
+                      paddingTop: "14px",
+                      borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+                      width: "100%"
+                    }}
+                  >
+                    <button
+                      type="button"
+                      style={{
+                        width: "auto",
+                        padding: "8px 14px",
+                        fontSize: "0.82rem",
+                        fontWeight: 700,
+                        borderRadius: "8px",
+                        background: "rgba(59, 130, 246, 0.18)",
+                        border: "1px solid rgba(59, 130, 246, 0.45)",
+                        color: "#60a5fa",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "flex-start",
+                        gap: "8px",
+                        transition: "all 0.2s ease",
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveTab("contributions");
+                      }}
+                    >
+                      <span>📑</span>
+                      <span>{language === "si" ? "දායකත්ව කළමනාකරණය" : "Manage Deposits"}</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
-              <div className="metric-card">
+              {/* Metric Card 4: Registered Members */}
+              <div
+                className="metric-card cursor-pointer"
+                style={{ position: "relative", display: "flex", flexDirection: "column" }}
+                onClick={() => setActiveTab("members")}
+                title={language === "si" ? "සාමාජිකයන් පටිත්ත වෙත යන්න (Click to view members)" : "View Members Tab (Click to switch)"}
+              >
                 <div className="metric-header">
                   <span className="metric-label">{t(language, "totalMembers")}</span>
                   <div className="metric-icon icon-purple">👥</div>
@@ -1958,6 +2105,45 @@ export default function WelfareApp() {
                 <div className="metric-subtext">
                   {fund ? `${fund.activeMembers} ${language === "si" ? "සක්‍රීය" : "active"} • ${fund.pendingLoansCount} ${language === "si" ? "පොරොත්තුවේ ඇති ණය" : "pending loans"}` : "..."}
                 </div>
+
+                {isAdmin && (
+                  <div
+                    className="flex flex-row items-center justify-start gap-3"
+                    style={{
+                      marginTop: "auto",
+                      paddingTop: "14px",
+                      borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+                      width: "100%"
+                    }}
+                  >
+                    <button
+                      type="button"
+                      style={{
+                        width: "auto",
+                        padding: "8px 14px",
+                        fontSize: "0.82rem",
+                        fontWeight: 700,
+                        borderRadius: "8px",
+                        background: "rgba(168, 85, 247, 0.18)",
+                        border: "1px solid rgba(168, 85, 247, 0.45)",
+                        color: "#c084fc",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "flex-start",
+                        gap: "8px",
+                        transition: "all 0.2s ease",
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveTab("members");
+                      }}
+                    >
+                      <span>👥</span>
+                      <span>{language === "si" ? "සාමාජිකයන් කළමනාකරණය" : "Manage Members"}</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1965,30 +2151,39 @@ export default function WelfareApp() {
       {/* ── TAB 1: OVERVIEW ───────────────────────────────────────────────── */}
       {activeTab === "overview" && (
         <div className="overview-grid">
-              {/* Fund Accounting Breakdown */}
-              <div className="glass-panel">
+              {/* Fund Accounting Breakdown - Interactive Dashboard Health Panel */}
+              <div
+                className="glass-panel cursor-pointer"
+                onClick={() => setActiveTab("finance")}
+                title={language === "si" ? "සම්පූර්ණ මූල්‍ය විගණන විස්තර බැලීමට ක්ලික් කරන්න" : "Click anywhere to view full Finance records"}
+              >
                 <div className="panel-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
                   <div className="panel-title-group">
                     <h2>{language === "si" ? "මූල්‍ය සෞඛ්‍යය සහ මුදල් ප්‍රවාහ ගිණුම්කරණය" : "Fund Health & Cash Flow Accounting"}</h2>
                     <p>{language === "si" ? "තැන්පතු, ණය නිකුත් කිරීම් සහ ආපසු අයවීම් විගණනය" : "Audit of deposits, disbursements, and repayments"}</p>
                   </div>
                   {isAdmin && (
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm"
-                      style={{
-                        background: "linear-gradient(135deg, #059669 0%, #10b981 100%)",
-                        boxShadow: "0 4px 14px rgba(16, 185, 129, 0.25)",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "6px"
-                      }}
-                      onClick={() => openBalanceModal("current")}
-                      title={language === "si" ? "ගිණුම් ශේෂය කළමනාකරණය / යාවත්කාලීන කරන්න" : "Manage / update association account balance"}
-                    >
-                      <span>⚙️</span>
-                      <span>{language === "si" ? "ගිණුම් ශේෂය කළමනාකරණය" : "Manage"}</span>
-                    </button>
+                    <div className="flex flex-row items-center justify-start gap-3">
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        style={{
+                          background: "linear-gradient(135deg, #059669 0%, #10b981 100%)",
+                          boxShadow: "0 4px 14px rgba(16, 185, 129, 0.25)",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px"
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openBalanceModal("current");
+                        }}
+                        title={language === "si" ? "ගිණුම් ශේෂය කළමනාකරණය / යාවත්කාලීන කරන්න" : "Manage / update association account balance"}
+                      >
+                        <span>⚙️</span>
+                        <span>{language === "si" ? "ගිණුම් ශේෂය කළමනාකරණය" : "Manage"}</span>
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -2007,7 +2202,15 @@ export default function WelfareApp() {
                     </span>
                   </div>
 
-                  <div className="endpoint-row" style={{ padding: "16px" }}>
+                  <div
+                    className="endpoint-row cursor-pointer"
+                    style={{ padding: "16px" }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveTab("contributions");
+                    }}
+                    title={language === "si" ? "දායකත්ව පටිත්ත වෙත යන්න" : "Click to view Contributions"}
+                  >
                     <div>
                       <strong style={{ color: "#34d399", display: "block" }}>
                         {language === "si" ? "+ එකතු වූ සාමාජික දායකත්ව" : "+ Member Contributions Collected"}
@@ -2021,7 +2224,15 @@ export default function WelfareApp() {
                     </span>
                   </div>
 
-                  <div className="endpoint-row" style={{ padding: "16px" }}>
+                  <div
+                    className="endpoint-row cursor-pointer"
+                    style={{ padding: "16px" }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveTab("loans");
+                    }}
+                    title={language === "si" ? "ණය පටිත්ත වෙත යන්න" : "Click to view Loans"}
+                  >
                     <div>
                       <strong style={{ color: "#60a5fa", display: "block" }}>
                         {language === "si" ? "+ ලැබුණු ණය ආපසු ගෙවීම්" : "+ Loan Repayments Received"}
@@ -2035,7 +2246,15 @@ export default function WelfareApp() {
                     </span>
                   </div>
 
-                  <div className="endpoint-row" style={{ padding: "16px" }}>
+                  <div
+                    className="endpoint-row cursor-pointer"
+                    style={{ padding: "16px" }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveTab("loans");
+                    }}
+                    title={language === "si" ? "ණය පටිත්ත වෙත යන්න" : "Click to view Loans"}
+                  >
                     <div>
                       <strong style={{ color: "#fb7185", display: "block" }}>
                         {language === "si" ? "- සාමාජිකයන් වෙත නිකුත් කළ ණය" : "- Loans Disbursed to Members"}
@@ -2049,7 +2268,15 @@ export default function WelfareApp() {
                     </span>
                   </div>
 
-                  <div className="endpoint-row" style={{ padding: "16px" }}>
+                  <div
+                    className="endpoint-row cursor-pointer"
+                    style={{ padding: "16px" }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveTab("finance");
+                    }}
+                    title={language === "si" ? "මූල්‍ය පටිත්ත වෙත යන්න" : "Click to view Finance"}
+                  >
                     <div>
                       <strong style={{ color: "#34d399", display: "block" }}>
                         {language === "si" ? `+ ${t(language, "totalOtherIncomeLine")}` : `+ ${t(language, "totalOtherIncomeLine")}`}
@@ -2063,7 +2290,15 @@ export default function WelfareApp() {
                     </span>
                   </div>
 
-                  <div className="endpoint-row" style={{ padding: "16px" }}>
+                  <div
+                    className="endpoint-row cursor-pointer"
+                    style={{ padding: "16px" }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveTab("finance");
+                    }}
+                    title={language === "si" ? "මූල්‍ය පටිත්ත වෙත යන්න" : "Click to view Finance"}
+                  >
                     <div>
                       <strong style={{ color: "#f87171", display: "block" }}>
                         {language === "si" ? `- ${t(language, "totalExpenseLine")}` : `- ${t(language, "totalExpenseLine")}`}
@@ -2077,7 +2312,9 @@ export default function WelfareApp() {
                     </span>
                   </div>
 
+                  {/* Summary Card: Net Cash Balance */}
                   <div
+                    className="cursor-pointer"
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
@@ -2090,6 +2327,8 @@ export default function WelfareApp() {
                       flexWrap: "wrap",
                       gap: "12px"
                     }}
+                    onClick={() => setActiveTab("finance")}
+                    title={language === "si" ? "සම්පූර්ණ මූල්‍ය විගණන ලේඛන බැලීමට ක්ලික් කරන්න" : "Click to view full Finance ledger"}
                   >
                     <div>
                       <strong style={{ fontSize: "1.05rem", color: "#a5b4fc" }}>
@@ -2098,32 +2337,38 @@ export default function WelfareApp() {
                       <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", margin: "4px 0 0 0" }}>
                         {language === "si" ? "ණය නිකුත් කිරීම සඳහා පවතින ද්‍රවශීල ප්‍රාග්ධනය" : "Liquid capital available for loan disbursement"}
                       </p>
+                      {isAdmin && (
+                        <div className="flex flex-row items-center justify-start gap-3" style={{ marginTop: "10px" }}>
+                          <button
+                            type="button"
+                            style={{
+                              padding: "6px 14px",
+                              fontSize: "0.8rem",
+                              borderRadius: "7px",
+                              background: "rgba(16, 185, 129, 0.18)",
+                              border: "1px solid rgba(16, 185, 129, 0.45)",
+                              color: "#34d399",
+                              cursor: "pointer",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "flex-start",
+                              gap: "6px",
+                              fontWeight: 700,
+                              transition: "all 0.2s ease"
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openBalanceModal("current");
+                            }}
+                            title={language === "si" ? "ගිණුම් ශේෂය කළමනාකරණය / යාවත්කාලීන කරන්න" : "Manage / update association account balance"}
+                          >
+                            <span>⚙️</span>
+                            <span>{language === "si" ? "ගිණුම් ශේෂය කළමනාකරණය" : "Manage"}</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-                      {isAdmin && (
-                        <button
-                          type="button"
-                          style={{
-                            padding: "6px 12px",
-                            fontSize: "0.8rem",
-                            borderRadius: "7px",
-                            background: "rgba(16, 185, 129, 0.18)",
-                            border: "1px solid rgba(16, 185, 129, 0.45)",
-                            color: "#34d399",
-                            cursor: "pointer",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "5px",
-                            fontWeight: 700,
-                            transition: "all 0.2s ease"
-                          }}
-                          onClick={() => openBalanceModal("current")}
-                          title={language === "si" ? "ගිණුම් ශේෂය කළමනාකරණය / යාවත්කාලීන කරන්න" : "Manage / update association account balance"}
-                        >
-                          <span>⚙️</span>
-                          <span>{language === "si" ? "ගිණුම් ශේෂය කළමනාකරණය" : "Manage"}</span>
-                        </button>
-                      )}
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: "1.5rem", fontWeight: 800, color: "#ffffff" }}>
                         {curr}{fund ? fund.currentCashPool.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "0.00"}
                       </span>
@@ -2132,8 +2377,12 @@ export default function WelfareApp() {
                 </div>
               </div>
 
-              {/* Pending Loan Approvals */}
-              <div className="glass-panel">
+              {/* Pending Loan Approvals - Interactive Dashboard Health Panel */}
+              <div
+                className="glass-panel cursor-pointer"
+                onClick={() => setActiveTab("loans")}
+                title={language === "si" ? "ණය කළමනාකරණය පටිත්ත වෙත යන්න" : "Click to navigate to Loans tab"}
+              >
                 <div className="panel-header">
                   <div className="panel-title-group">
                     <h2>{language === "si" ? "පොරොත්තුවේ ඇති ණය සමාලෝචන" : "Pending Loan Reviews"}</h2>
@@ -2172,22 +2421,30 @@ export default function WelfareApp() {
                               alignItems: "center",
                               width: "100%",
                               marginTop: "6px",
+                              flexWrap: "wrap",
+                              gap: "10px"
                             }}
                           >
                             <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--text-primary)" }}>
                               {curr}{loan.principalAmount.toLocaleString()} ({loan.termMonths} {language === "si" ? "මාස" : "mo"} @ {loan.interestRate}%)
                             </span>
 
-                            <div style={{ display: "flex", gap: "8px" }}>
+                            <div className="flex flex-row items-center justify-start gap-3">
                               <button
                                 className="btn btn-success btn-sm"
-                                onClick={() => handleUpdateLoanStatus(loan.id, "Active")}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleUpdateLoanStatus(loan.id, "Active");
+                                }}
                               >
                                 {language === "si" ? "අනුමත කර නිකුත් කරන්න" : "Approve & Disburse"}
                               </button>
                               <button
                                 className="btn btn-danger-ghost btn-sm"
-                                onClick={() => handleUpdateLoanStatus(loan.id, "Rejected")}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleUpdateLoanStatus(loan.id, "Rejected");
+                                }}
                               >
                                 {language === "si" ? "ප්‍රතික්ෂේප කරන්න" : "Reject"}
                               </button>
@@ -3518,12 +3775,13 @@ export default function WelfareApp() {
 
                   <div className="form-group">
                     <label className="form-label" style={duplicateValidation.idError ? { color: "#f87171" } : undefined}>
-                      {language === "si" ? "හැඳුනුම්පත් අංකය (ID Number)" : "ID Number (NIC)"}
+                      {language === "si" ? "හැඳුනුම්පත් අංකය (ID Number) *" : "ID Number (NIC) *"}
                     </label>
                     <input
                       type="text"
                       className="form-input"
                       placeholder="e.g. 199012345678 / 901234567V"
+                      required
                       value={memberForm.idNumber}
                       style={duplicateValidation.idError ? { borderColor: "#ef4444", boxShadow: "0 0 0 3px rgba(239, 68, 68, 0.25)", background: "rgba(239, 68, 68, 0.05)" } : undefined}
                       onChange={(e) => setMemberForm({ ...memberForm, idNumber: e.target.value })}

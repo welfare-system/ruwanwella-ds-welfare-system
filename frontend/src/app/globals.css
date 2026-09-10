@@ -1728,5 +1728,75 @@ html, body {
   }
 }
 
+/* ==========================================================================
+   Utility Classes & Interactive Dashboard Styles
+   ========================================================================== */
+.flex {
+  display: flex;
+}
+.flex-row {
+  flex-direction: row;
+}
+.flex-col {
+  flex-direction: column;
+}
+.items-center {
+  align-items: center;
+}
+.justify-start {
+  justify-content: flex-start;
+}
+.justify-between {
+  justify-content: space-between;
+}
+.justify-end {
+  justify-content: flex-end;
+}
+.gap-2 {
+  gap: 0.5rem;
+}
+.gap-3 {
+  gap: 0.75rem;
+}
+.gap-4 {
+  gap: 1rem;
+}
+.cursor-pointer {
+  cursor: pointer !important;
+}
 
+/* Interactive Card & Panel Hover Enhancements */
+.metric-card.cursor-pointer,
+.glass-panel.cursor-pointer,
+.item-card.cursor-pointer {
+  cursor: pointer !important;
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
 
+.metric-card.cursor-pointer:hover {
+  transform: translateY(-3px);
+  border-color: rgba(99, 102, 241, 0.45);
+  box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.25), 0 8px 10px -6px rgba(99, 102, 241, 0.2);
+}
+
+.metric-card.cursor-pointer:active {
+  transform: translateY(-1px);
+}
+
+.glass-panel.cursor-pointer:hover {
+  border-color: rgba(99, 102, 241, 0.45);
+  box-shadow: 0 12px 30px -5px rgba(0, 0, 0, 0.35), 0 0 18px rgba(99, 102, 241, 0.12);
+}
+
+.endpoint-row.cursor-pointer {
+  cursor: pointer !important;
+  transition: all 0.2s ease;
+}
+
+.endpoint-row.cursor-pointer:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(99, 102, 241, 0.4);
+  transform: translateX(4px);
+}

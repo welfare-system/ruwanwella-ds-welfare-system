@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS members (
   phone VARCHAR(50) NOT NULL,
   department VARCHAR(100) NOT NULL,
   thanthura VARCHAR(100),
-  id_number VARCHAR(100),
+  id_number VARCHAR(100) NOT NULL UNIQUE,
   sewa_ankaya VARCHAR(100),
   role VARCHAR(50) NOT NULL DEFAULT 'Member',
   status VARCHAR(20) NOT NULL DEFAULT 'Active',
@@ -134,6 +134,8 @@ async function initDatabase() {
       await db.query('ALTER TABLE members ADD COLUMN IF NOT EXISTS thanthura VARCHAR(100);');
       await db.query('ALTER TABLE members ADD COLUMN IF NOT EXISTS id_number VARCHAR(100);');
       await db.query('ALTER TABLE members ADD COLUMN IF NOT EXISTS sewa_ankaya VARCHAR(100);');
+      
+      // Backfill from notes if empty
       await db.query(`
         UPDATE members 
         SET id_number = substring(notes from 'NIC/ID:\\s*([^|\\]]+)')
@@ -144,7 +146,49 @@ async function initDatabase() {
         SET sewa_ankaya = substring(notes from 'Service No:\\s*([^|\\]]+)')
         WHERE (sewa_ankaya IS NULL OR sewa_ankaya = '') AND notes ~ 'Service No:';
       `);
-    } catch (_) {}
+
+      // Trim all id_numbers
+      await db.query(`
+        UPDATE members 
+        SET id_number = TRIM(id_number)
+        WHERE id_number IS NOT NULL;
+      `);
+
+      // Fill any remaining NULL or empty id_numbers with unique fallback
+      await db.query(`
+        UPDATE members 
+        SET id_number = 'NIC-' || member_id
+        WHERE id_number IS NULL OR id_number = '';
+      `);
+
+      // Deduplicate any pre-existing duplicates in historical records before applying constraint
+      await db.query(`
+        WITH duplicates AS (
+          SELECT id, ROW_NUMBER() OVER (PARTITION BY UPPER(TRIM(id_number)) ORDER BY created_at ASC, id ASC) as rn
+          FROM members
+          WHERE id_number IS NOT NULL AND id_number <> ''
+        )
+        UPDATE members m
+        SET id_number = TRIM(m.id_number) || '-D' || d.rn
+        FROM duplicates d
+        WHERE m.id = d.id AND d.rn > 1;
+      `);
+
+      // Enforce NOT NULL on id_number
+      try {
+        await db.query('ALTER TABLE members ALTER COLUMN id_number SET NOT NULL;');
+      } catch (_) {}
+
+      // Enforce case-insensitive UNIQUE index on id_number
+      await db.query('CREATE UNIQUE INDEX IF NOT EXISTS members_id_number_unique_idx ON members (UPPER(TRIM(id_number)));');
+
+      // Enforce standard UNIQUE constraint on id_number
+      try {
+        await db.query('ALTER TABLE members ADD CONSTRAINT members_id_number_unique UNIQUE (id_number);');
+      } catch (_) {}
+    } catch (migErr) {
+      console.warn('⚠️ id_number migration warning:', migErr.message);
+    }
 
     // 1. Seed System Settings
     const settingsCheck = await db.query('SELECT COUNT(*) FROM system_settings');

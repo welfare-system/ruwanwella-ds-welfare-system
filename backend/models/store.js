@@ -502,28 +502,90 @@ module.exports = {
   },
 
   checkMemberDuplicate: async ({ idNumber, sewaAnkaya, email, excludeId }) => {
-    const allMembers = await module.exports.getMembers();
-    const cleanId = idNumber ? String(idNumber).trim().toUpperCase() : '';
-    const cleanSewa = sewaAnkaya ? String(sewaAnkaya).trim().toUpperCase() : '';
+    const cleanId = idNumber ? String(idNumber).trim() : '';
+    const cleanSewa = sewaAnkaya ? String(sewaAnkaya).trim() : '';
     const cleanEmail = email && typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : '';
 
+    if (db.isConfigured()) {
+      if (cleanId) {
+        let q = 'SELECT id, member_id, name, id_number FROM members WHERE UPPER(TRIM(id_number)) = UPPER(TRIM($1))';
+        const params = [cleanId];
+        if (excludeId) {
+          q += ' AND id <> $2 AND member_id <> $2';
+          params.push(excludeId);
+        }
+        q += ' LIMIT 1';
+        const res = await db.query(q, params);
+        if (res.rows.length > 0) {
+          const row = res.rows[0];
+          return {
+            hasDuplicate: true,
+            field: 'idNumber',
+            error: `A member with ID Number (NIC) "${cleanId}" already exists in system records (${row.name} - ${row.member_id}). Registration blocked to prevent duplicate entries.`,
+            conflictingMember: { name: row.name, memberId: row.member_id, idNumber: row.id_number }
+          };
+        }
+      }
+
+      if (cleanSewa) {
+        let q = 'SELECT id, member_id, name, sewa_ankaya FROM members WHERE UPPER(TRIM(sewa_ankaya)) = UPPER(TRIM($1))';
+        const params = [cleanSewa];
+        if (excludeId) {
+          q += ' AND id <> $2 AND member_id <> $2';
+          params.push(excludeId);
+        }
+        q += ' LIMIT 1';
+        const res = await db.query(q, params);
+        if (res.rows.length > 0) {
+          const row = res.rows[0];
+          return {
+            hasDuplicate: true,
+            field: 'sewaAnkaya',
+            error: `A member with Sewa Ankaya (Service ID) "${cleanSewa}" already exists in system records (${row.name} - ${row.member_id}). Registration blocked to prevent duplicate entries.`,
+            conflictingMember: { name: row.name, memberId: row.member_id, sewaAnkaya: row.sewa_ankaya }
+          };
+        }
+      }
+
+      if (cleanEmail) {
+        let q = 'SELECT id, member_id, name, email FROM members WHERE LOWER(TRIM(email)) = LOWER(TRIM($1))';
+        const params = [cleanEmail];
+        if (excludeId) {
+          q += ' AND id <> $2 AND member_id <> $2';
+          params.push(excludeId);
+        }
+        q += ' LIMIT 1';
+        const res = await db.query(q, params);
+        if (res.rows.length > 0) {
+          const row = res.rows[0];
+          return {
+            hasDuplicate: true,
+            field: 'email',
+            error: `Email address "${cleanEmail}" already exists in system records (${row.name} - ${row.member_id}). Registration blocked to prevent duplicate entries.`,
+            conflictingMember: { name: row.name, memberId: row.member_id, email: row.email }
+          };
+        }
+      }
+    }
+
+    const allMembers = await module.exports.getMembers();
     for (const m of allMembers) {
       if (excludeId && (m.id === excludeId || m.memberId === excludeId)) continue;
 
-      if (cleanId && m.idNumber && m.idNumber.trim().toUpperCase() === cleanId) {
+      if (cleanId && m.idNumber && m.idNumber.trim().toUpperCase() === cleanId.toUpperCase()) {
         return {
           hasDuplicate: true,
           field: 'idNumber',
-          error: `A member with ID Number (NIC) "${idNumber.trim()}" already exists in system records (${m.name} - ${m.memberId}). Registration blocked to prevent duplicate entries.`,
+          error: `A member with ID Number (NIC) "${cleanId}" already exists in system records (${m.name} - ${m.memberId}). Registration blocked to prevent duplicate entries.`,
           conflictingMember: { name: m.name, memberId: m.memberId, idNumber: m.idNumber }
         };
       }
 
-      if (cleanSewa && m.sewaAnkaya && m.sewaAnkaya.trim().toUpperCase() === cleanSewa) {
+      if (cleanSewa && m.sewaAnkaya && m.sewaAnkaya.trim().toUpperCase() === cleanSewa.toUpperCase()) {
         return {
           hasDuplicate: true,
           field: 'sewaAnkaya',
-          error: `A member with Sewa Ankaya (Service ID) "${sewaAnkaya.trim()}" already exists in system records (${m.name} - ${m.memberId}). Registration blocked to prevent duplicate entries.`,
+          error: `A member with Sewa Ankaya (Service ID) "${cleanSewa}" already exists in system records (${m.name} - ${m.memberId}). Registration blocked to prevent duplicate entries.`,
           conflictingMember: { name: m.name, memberId: m.memberId, sewaAnkaya: m.sewaAnkaya }
         };
       }
